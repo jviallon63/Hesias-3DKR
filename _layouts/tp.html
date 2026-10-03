@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title }} - {{ site.title }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="{{ "/assets/style.css" | relative_url }}">
+</head>
+
+<body>
+  {% include header.html %}
+
+  <main class="container">
+
+    <h1>{{ page.title }}</h1>
+
+    {% if page.objective %}
+    <div class="section objective">
+      <h2>Objectif</h2>
+      <p>{{ page.objective }}</p>
+    </div>
+    {% endif %}
+
+    {{ content }}
+
+  </main>
+
+  <aside class="toc-sidebar" aria-label="Sur cette page">
+    <p class="toc-title">Sur cette page</p>
+    <nav id="toc-nav"></nav>
+  </aside>
+
+  {% include footer.html %}
+
+  <script>
+  (function () {
+    var main = document.querySelector('main');
+    var nav  = document.getElementById('toc-nav');
+    var sidebar = document.querySelector('.toc-sidebar');
+    if (!main || !nav || !sidebar) return;
+
+    var headings = Array.from(main.querySelectorAll('h2, h3'));
+    if (!headings.length) return;
+
+    var ul = document.createElement('ul');
+    headings.forEach(function (h, i) {
+      if (!h.id) h.id = 'heading-' + i;
+      var li = document.createElement('li');
+      li.className = h.tagName === 'H3' ? 'toc-h3' : 'toc-h2';
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent.trim();
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+    nav.appendChild(ul);
+
+    var links = Array.from(nav.querySelectorAll('a'));
+    var activeId = null;
+
+    var setActive = function (id) {
+      if (id === activeId) return;
+      activeId = id;
+      links.forEach(function (l) { l.classList.remove('active'); });
+      var a = nav.querySelector('a[href="#' + id + '"]');
+      if (a) a.classList.add('active');
+    };
+
+    var observer = new IntersectionObserver(function () {
+      var top = null;
+      headings.forEach(function (h) {
+        var rect = h.getBoundingClientRect();
+        if (rect.top <= 120 && rect.top > (top ? top.rect.top : -Infinity)) {
+          top = { id: h.id, rect: rect };
+        }
+      });
+      if (top) setActive(top.id);
+    }, { rootMargin: '0px 0px -60% 0px', threshold: [0, 1] });
+
+    headings.forEach(function (h) { observer.observe(h); });
+
+    if (headings[0] && headings[0].id) setActive(headings[0].id);
+  })();
+  </script>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    document.querySelectorAll('pre > code.language-mermaid').forEach(function (code) {
+      var div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = code.textContent;
+      code.parentElement.replaceWith(div);
+    });
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</body>
+</html>

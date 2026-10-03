@@ -1,0 +1,46 @@
+<header class="site-header" role="banner">
+  <div class="wrapper">
+    <a class="site-title" rel="author" href="{{ "/" | relative_url }}">
+      <!-- Baleine stylisée portant des conteneurs -->
+      <svg class="dk-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 44" aria-hidden="true">
+        <g fill="#2496ED">
+          <rect x="10" y="14" width="7" height="6" rx="0.8"/>
+          <rect x="18" y="14" width="7" height="6" rx="0.8"/>
+          <rect x="26" y="14" width="7" height="6" rx="0.8"/>
+          <rect x="34" y="14" width="7" height="6" rx="0.8"/>
+          <rect x="18" y="7" width="7" height="6" rx="0.8"/>
+          <rect x="26" y="7" width="7" height="6" rx="0.8"/>
+          <rect x="34" y="7" width="7" height="6" rx="0.8"/>
+          <rect x="26" y="0" width="7" height="6" rx="0.8"/>
+          <path d="M1 22H50C52 18 56 17 59 18.5C60 19 61 20 62 20.5C61 22.5 59 24 57 24.5C54 36 42 43 26 43C11 43 3 33 1 22Z"/>
+        </g>
+      </svg>
+      {{ site.title | escape }}
+    </a>
+
+    <nav class="site-nav">
+      <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+      <label for="nav-trigger">
+        <span class="menu-icon">
+          <svg viewBox="0 0 18 15" width="18px" height="15px" aria-hidden="true">
+            <path d="M18,1.484C18,2.304,17.335,2.969,16.516,2.969H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0
+              h15.031C17.335,0,18,0.665,18,1.484L18,1.484z" />
+            <path d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.819,0.665-1.484,1.484-1.484h15.031
+              C17.335,6.031,18,6.696,18,7.516L18,7.516z" />
+            <path d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0c0-0.819,0.665-1.484,1.484-1.484
+              h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z" />
+          </svg>
+        </span>
+      </label>
+
+      <div class="trigger">
+        {% assign tp_pages = site.pages | where_exp: "p", "p.dir == '/tp/'" | sort: "name" %}
+        {% for tp in tp_pages %}
+          {% if tp.title %}
+          <a class="page-link" href="{{ tp.url | relative_url }}">{{ tp.title | split: " -" | first | escape }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </nav>
+  </div>
+</header>

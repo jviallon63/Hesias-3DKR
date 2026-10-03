@@ -1,0 +1,13 @@
+title: "3DKR - TPs Docker"
+theme: minima
+
+markdown: kramdown
+
+kramdown:
+  parse_block_html: true
+
+defaults:
+  - scope:
+      path: "tp"
+    values:
+      layout: "tp"
