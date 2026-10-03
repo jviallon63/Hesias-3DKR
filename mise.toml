@@ -1,0 +1,14 @@
+[tools]
+ruby = "3.3"
+
+[tasks.bundle_install]
+description = "Installe les gems du site (github-pages, jekyll)"
+sources = ["Gemfile"]
+outputs = { auto = true }
+hide = true
+run = "bundle install"
+
+[tasks.github_pages]
+description = "Prévisualise le site en local sur http://localhost:4000 (rechargement automatique)"
+depends = ["bundle_install"]
+run = "bundle exec jekyll serve --livereload"
