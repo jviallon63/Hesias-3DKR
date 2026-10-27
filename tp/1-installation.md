@@ -23,8 +23,6 @@ Ce TP est volontairement court. Il pose les bases sur lesquelles tous les suivan
 
 </div>
 
-> Vous n'avez besoin de traiter que l'installation correspondant à votre système. Si vous avez accès à une seconde machine ou à une VM, faire aussi les autres est un bon exercice.
-
 ---
 
 ## Étape 1 - Comprendre ce que l'on installe
@@ -50,23 +48,6 @@ flowchart LR
     D -->|pull| R["Registre (Docker Hub)"]
 ```
 
-**Questions de réflexion :**
-
-- Pourquoi le client et le daemon sont-ils deux programmes séparés ? Que permet cette séparation ?
-- Sur macOS, un `uname -a` exécuté dans un conteneur affichera-t-il `Darwin` ou `Linux` ? Pourquoi ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 1</summary>
-{:/nomarkdown}
-
-Le client communique avec le daemon par une API REST, exposée par défaut sur le socket Unix `/var/run/docker.sock` (ou un named pipe sous Windows). Le daemon peut donc être sur une autre machine : `docker -H ssh://user@serveur ps` pilote un hôte distant, et c'est exactement ce que fait Docker Desktop avec sa VM.
-
-Dans un conteneur sur macOS, `uname -a` affichera `Linux`. Les conteneurs partagent le noyau de leur hôte, et l'hôte réel du conteneur est ici la VM Linux de Docker Desktop, pas macOS. Vous le vérifierez à l'étape 6.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
 ---
 
 ## Étape 2 - Installer Docker
@@ -76,7 +57,6 @@ Dans un conteneur sur macOS, `uname -a` affichera `Linux`. Les conteneurs partag
 - Choisissez la méthode adaptée à votre système.
 - Suivez de préférence la documentation officielle : <https://docs.docker.com/engine/install/> pour Docker Engine, <https://docs.docker.com/desktop/> pour Docker Desktop.
 - Sous Linux, installez Docker Engine depuis le dépôt officiel de Docker, pas depuis le paquet `docker.io` de votre distribution (souvent en retard de plusieurs versions).
-- Sous Linux, faites en sorte de pouvoir lancer `docker` sans `sudo`, et mesurez ce que cela implique en termes de sécurité.
 
 > Docker Desktop est gratuit pour un usage personnel, éducatif et pour les petites entreprises. Au-delà (plus de 250 salariés ou plus de 10 M$ de chiffre d'affaires), une licence payante est requise. Vérifiez les conditions en vigueur avant de l'installer sur un poste professionnel.
 
@@ -118,15 +98,6 @@ Le service est démarré et activé au boot par le paquet. Vérifiez-le :
 systemctl status docker --no-pager
 ```
 
-Pour utiliser `docker` sans `sudo`, ajouter votre utilisateur au groupe `docker` :
-
-```bash
-sudo usermod -aG docker "$USER"
-newgrp docker   # ou fermer et rouvrir la session
-```
-
-> Appartenir au groupe `docker` revient à être root sur la machine : un utilisateur capable de lancer un conteneur peut monter `/` de l'hôte dedans (`docker run -v /:/host ...`) et y faire ce qu'il veut. Sur un serveur partagé, on préfère `sudo` ou le mode rootless (<https://docs.docker.com/engine/security/rootless/>).
-
 Pour Fedora, RHEL et dérivés, la procédure équivaut avec `dnf` ; elle est décrite sur <https://docs.docker.com/engine/install/fedora/>.
 
 {::nomarkdown}
@@ -134,16 +105,12 @@ Pour Fedora, RHEL et dérivés, la procédure équivaut avec `dnf` ; elle est d�
 {:/nomarkdown}
 
 {::nomarkdown}
-<details><summary>Solution - Étape 2, Windows 10 / 11</summary>
+<details><summary>Solution - Étape 2, Windows</summary>
 {:/nomarkdown}
 
 Prérequis : Windows 10 22H2 ou plus récent, virtualisation activée dans le BIOS/UEFI (vérifiable dans le Gestionnaire des tâches, onglet Performances, CPU).
 
 Dans un PowerShell **ouvert en administrateur**, installer WSL 2 puis redémarrer :
-
-```powershell
-wsl --install
-```
 
 Après le redémarrage, installer Docker Desktop (via `winget`, ou depuis l'installeur téléchargeable sur le site de Docker) :
 
@@ -182,8 +149,6 @@ Alternative libre, sans interface graphique : Colima, qui démarre une VM Lima c
 brew install colima docker docker-compose
 colima start
 ```
-
-OrbStack est une autre option, plus légère que Docker Desktop, mais soumise à sa propre licence.
 
 {::nomarkdown}
 </details>
