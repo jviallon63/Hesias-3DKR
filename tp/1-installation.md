@@ -234,90 +234,22 @@ To generate this message, Docker took the following steps:
 
 ---
 
-## Étape 5 - Observer et nettoyer
-
-Un conteneur qui a terminé son travail n'est pas supprimé automatiquement : il reste dans l'état `Exited` avec son système de fichiers et ses logs, jusqu'à ce que vous le supprimiez.
-
-**Ce que vous devez faire :**
-
-- Listez les conteneurs en cours d'exécution. Pourquoi la liste est-elle vide ?
-- Listez **tous** les conteneurs, y compris ceux arrêtés. Relevez l'identifiant, le nom généré et le statut de votre conteneur `hello-world`.
-- Relancez `hello-world` deux fois de plus, puis recomptez les conteneurs.
-- Supprimez tous ces conteneurs, puis l'image.
-- Relancez enfin `hello-world` en faisant en sorte que le conteneur soit supprimé automatiquement dès qu'il se termine, et vérifiez qu'il n'en reste aucune trace.
-
-{::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
-{:/nomarkdown}
-
-```bash
-docker ps          # vide : le conteneur s'est terminé immédiatement
-docker ps -a       # affiche les conteneurs arrêtés
-```
-
-Exemple de sortie de `docker ps -a` :
-
-```text
-CONTAINER ID   IMAGE         COMMAND    CREATED          STATUS                      NAMES
-3f2a9c1d7e04   hello-world   "/hello"   12 seconds ago   Exited (0) 11 seconds ago   charming_lovelace
-```
-
-Le nom est généré aléatoirement (adjectif + nom de scientifique). Le code `Exited (0)` indique un arrêt sans erreur. Chaque `docker run` crée un **nouveau** conteneur : après deux lancements supplémentaires, il y en a trois.
-
-Nettoyage :
-
-```bash
-docker rm $(docker ps -aq)    # supprime tous les conteneurs arrêtés
-docker rmi hello-world        # supprime l'image
-```
-
-Avec `--rm`, le conteneur est supprimé à sa sortie. Comme l'image a été supprimée, elle est de nouveau téléchargée :
-
-```bash
-docker run --rm hello-world
-docker ps -a                  # aucun conteneur
-```
-
-`docker system prune` supprime en une fois conteneurs arrêtés, réseaux inutilisés et images orphelines. Il demande confirmation, mais lisez ce qu'il propose de supprimer avant de répondre.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 6 - Aller plus loin : un conteneur interactif
+## Étape 5 - Aller plus loin : un conteneur interactif
 
 `hello-world` ne contient presque rien. Pour voir ce qu'est vraiment un conteneur, lancez un système minimal dans lequel vous pouvez entrer.
 
 **Ce que vous devez faire :**
 
-- Lancez un conteneur `alpine` en mode interactif avec un shell, en le supprimant à la sortie.
+- Lancez un conteneur `alpine` en mode interactif avec un shell, en le supprimant à la sortie : `docker run --rm -it alpine sh`
 - Dans ce conteneur, affichez la version du noyau (`uname -a`), la distribution (`/etc/os-release`) et la liste des processus (`ps`).
 - Comparez le noyau affiché avec celui de votre hôte (ou de la VM Docker Desktop).
 - Sortez du conteneur.
+- Observer la taille de l'image avec `docker image ls`
 
-**Questions de réflexion :**
-
-- Combien de processus voyez-vous dans le conteneur ? Quel est le PID du shell ? Qu'est-ce que cela dit de l'isolation ?
-- Alpine pèse environ 5 Mo, une VM Ubuntu plusieurs Go. Qu'est-ce qui explique cet écart ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 6</summary>
+<details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
-
-```bash
-docker run --rm -it alpine sh
-```
-
-Dans le conteneur :
-
-```bash
-uname -a
-cat /etc/os-release
-ps
-exit
-```
 
 `uname -a` affiche le noyau de l'**hôte** (ou de la VM sous Windows et macOS), pas un noyau fourni par Alpine : un conteneur n'embarque pas de noyau. `/etc/os-release` indique en revanche Alpine, car c'est le système de fichiers de l'image qui est visible.
 
@@ -328,25 +260,3 @@ L'écart de taille s'explique par l'absence de noyau et de matériel virtualisé
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-
----
-
-## Dépannage
-
-| Symptôme | Cause probable | Piste |
-| --- | --- | --- |
-| `permission denied while trying to connect to the Docker daemon socket` | Utilisateur absent du groupe `docker` (Linux) | `sudo usermod -aG docker "$USER"`, puis nouvelle session |
-| `Cannot connect to the Docker daemon ... Is the docker daemon running?` | Daemon arrêté, ou Docker Desktop non démarré | `sudo systemctl start docker` ou lancer Docker Desktop |
-| `no matching manifest for linux/arm64/v8` | L'image n'est publiée que pour `amd64` | Ajouter `--platform linux/amd64` (émulation, plus lent) |
-| `toomanyrequests: You have reached your pull rate limit` | Limite de téléchargements anonymes sur Docker Hub | `docker login` ou attendre |
-| Docker Desktop reste bloqué sur « Starting » (Windows) | Virtualisation désactivée ou WSL 2 absent | Activer la virtualisation dans le BIOS, `wsl --update` |
-| `docker: command not found` juste après l'installation | `PATH` non rechargé | Ouvrir un nouveau terminal |
-
----
-
-## Pour résumer
-
-- Le client `docker` dialogue avec un daemon par une API ; les deux peuvent être sur des machines différentes.
-- Les conteneurs partagent le noyau Linux de leur hôte, d'où la VM sous Windows et macOS.
-- Une image est téléchargée depuis un registre ; un conteneur est une instance en cours d'exécution (ou terminée) de cette image.
-- Un conteneur arrêté existe toujours tant qu'il n'a pas été supprimé.
