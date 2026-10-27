@@ -108,9 +108,7 @@ Pour Fedora, RHEL et dérivés, la procédure équivaut avec `dnf` ; elle est d�
 <details><summary>Solution - Étape 2, Windows</summary>
 {:/nomarkdown}
 
-Prérequis : Windows 10 22H2 ou plus récent, virtualisation activée dans le BIOS/UEFI (vérifiable dans le Gestionnaire des tâches, onglet Performances, CPU).
-
-Dans un PowerShell **ouvert en administrateur**, installer WSL 2 puis redémarrer :
+Prérequis : Virtualisation activée dans le BIOS/UEFI (vérifiable dans le Gestionnaire des tâches, onglet Performances, CPU).
 
 Après le redémarrage, installer Docker Desktop (via `winget`, ou depuis l'installeur téléchargeable sur le site de Docker) :
 
@@ -118,11 +116,7 @@ Après le redémarrage, installer Docker Desktop (via `winget`, ou depuis l'inst
 winget install -e --id Docker.DockerDesktop
 ```
 
-Lancer Docker Desktop depuis le menu Démarrer, accepter les conditions d'utilisation, et attendre que l'icône de la barre des tâches indique que le moteur est démarré. Vérifier ensuite dans un terminal normal :
-
-```powershell
-docker version
-```
+Lancer Docker Desktop depuis le menu Démarrer, accepter les conditions d'utilisation, et attendre que l'icône de la barre des tâches indique que le moteur est démarré.
 
 Alternative sans Docker Desktop : installer une distribution Ubuntu dans WSL 2 (`wsl --install -d Ubuntu`), puis suivre la procédure Linux ci-dessus à l'intérieur de cette distribution. Il faut alors activer systemd dans la distribution (`/etc/wsl.conf`, section `[boot]`, `systemd=true`).
 
@@ -160,22 +154,13 @@ colima start
 
 **Ce que vous devez faire :**
 
-- Affichez la version du client **et** celle du serveur.
-- Affichez les informations détaillées du daemon : nombre de conteneurs et d'images, runtime utilisé, driver de stockage, système d'exploitation et architecture du serveur.
-
-**Questions de réflexion :**
-
-- Quelle est la valeur de `OS/Arch` côté `Client` et côté `Server` ? Sont-elles identiques sur votre machine ?
-- Que se passe-t-il si vous arrêtez le daemon (ou quittez Docker Desktop) puis relancez `docker version` ?
+- Affichez la version du client **et** celle du serveur : `docker version`
+- Affichez les informations détaillées du daemon : nombre de conteneurs et d'images, runtime utilisé, driver de stockage, système d'exploitation et architecture du serveur : `docker info`
+- Arrêtez le daemon docker (ou quittez Docker Desktop), et recommencez.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
-
-```bash
-docker version
-docker info
-```
 
 Sortie de `docker version` (abrégée, les numéros varient) :
 
@@ -217,24 +202,15 @@ Cela confirme que le client est un simple programme qui interroge une API. Sous 
 
 **Ce que vous devez faire :**
 
-- Téléchargez l'image `hello-world` **sans** la lancer, puis listez les images locales.
-- Lancez ensuite un conteneur à partir de cette image.
-- Relisez attentivement le message affiché : il décrit les étapes exécutées.
-
-**Questions de réflexion :**
-
-- Que serait-il arrivé si vous aviez lancé directement `docker run hello-world` sans télécharger l'image avant ?
-- Le message mentionne une architecture entre parenthèses (par exemple `arm64v8` ou `amd64`). D'où vient cette information, et pourquoi est-elle adaptée à votre machine alors que vous avez tapé le même nom d'image que votre voisin ?
+- Listez les images disponibles localement : `docker image ls`
+- Lancer le conteneur **hello-world** : `docker run hello-world`
+- Listez de nouveaux les images.
+- Listez les conteneur en execution : `docker container ps`
+- Relancer le container, observez les logs cette fois.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
-
-```bash
-docker pull hello-world
-docker images
-docker run hello-world
-```
 
 Sortie attendue du `run` :
 
@@ -250,14 +226,6 @@ To generate this message, Docker took the following steps:
     executable that produces the output you are currently reading.
  4. The Docker daemon streamed that output to the Docker client, which sent it
     to your terminal.
-```
-
-Sans `pull` préalable, `docker run` télécharge l'image automatiquement si elle est absente en local : la sortie contient alors `Unable to find image 'hello-world:latest' locally`, suivie de la progression du téléchargement. `pull` explicite sépare simplement les deux phases.
-
-`hello-world` est publiée sous forme d'image **multi-architecture** : le tag `latest` pointe vers un index de manifestes qui référence une image par couple OS/architecture. Au moment du pull, le daemon choisit celle qui correspond à sa plateforme. Pour le voir :
-
-```bash
-docker buildx imagetools inspect hello-world
 ```
 
 {::nomarkdown}
