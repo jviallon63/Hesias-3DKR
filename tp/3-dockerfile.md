@@ -16,22 +16,9 @@ La démarche est celle d'un projet réel :
 3. on mesure le résultat (taille, couches, temps de build) ;
 4. on optimise : c'est la **V2**.
 
-Ce TP s'en tient à des Dockerfiles **à une seule étape**. Vous constaterez leurs limites à la fin : le TP suivant, consacré aux builds multi-étapes, les lèvera.
-
 **Prérequis :**
 
-- TP 1 et TP 2 terminés.
-- Le dépôt de l'application, cloné dans votre répertoire personnel :
-
-  ```bash
-  cd ~
-  git clone <URL du dépôt fourni> tp3
-  cd tp3
-  ```
-
-  Il contient deux dossiers : `back/` (projet Maven) et `front/` (projet Angular). Vous n'avez besoin **ni de Java, ni de Maven, ni de Node.js** sur votre poste : tout se passe dans les images.
-
-> Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
+Clonez le dépôt de l'application de test [sample-app](https://github.com/jviallon63/sample-app). Il contient deux dossiers : `back/` (projet Maven) et `front/` (projet Angular). Le readme décrit comment executer chaque service. Vous n'avez besoin **ni de Java, ni de Maven, ni de Node.js** sur votre poste : tout se passe dans les images.
 
 ---
 
@@ -41,10 +28,8 @@ Ce TP s'en tient à des Dockerfiles **à une seule étape**. Vous constaterez le
 
 1. Lire la structure interne d'une image : index, manifeste, configuration et couches
 2. Traduire une procédure d'installation en `Dockerfile` en utilisant les instructions principales
-3. Comprendre le cache de build et ordonner les instructions en conséquence
-4. Réduire la taille d'une image et éviter d'y laisser des fichiers inutiles ou des secrets
-5. Choisir une image de base en connaissant les compromis
-6. Construire, versionner et étiqueter ses images
+3. Optimiser la taille d'une image et éviter d'y laisser des fichiers inutiles ou des secrets
+4. Construire, versionner et étiqueter ses images
 
 </div>
 
