@@ -35,80 +35,7 @@ Clonez le dépôt de l'application de test [sample-app](https://github.com/jvial
 
 ---
 
-## Étape 1 - Anatomie d'une image
-
-Une image n'est pas un fichier unique. Dans un registre, elle est décrite par trois types de documents :
-
-| Élément | Contenu |
-| --- | --- |
-| **Index** (ou *manifest list*) | La liste des variantes de l'image, une par plateforme (`linux/amd64`, `linux/arm64`...) |
-| **Manifeste** | Pour une plateforme donnée : la référence de la configuration et la liste ordonnée des couches |
-| **Configuration** (JSON) | Les métadonnées : architecture, variables d'environnement, commande par défaut, utilisateur, historique de construction, identifiants des couches |
-| **Couches** (*layers*) | Des archives tar, chacune contenant les fichiers ajoutés, modifiés ou supprimés par rapport à la précédente |
-
-Chaque élément est identifié par un **digest** (`sha256:...`), l'empreinte de son contenu.
-
-**Ce que vous devez faire :**
-
-- Téléchargez `ubuntu:24.04`, puis affichez son index avec `docker buildx imagetools inspect`. Relevez les plateformes disponibles.
-- Affichez le même index au format brut (`--raw`).
-- Avec `docker image inspect`, affichez la liste des couches (`RootFS.Layers`) et l'architecture de l'image téléchargée.
-- Exportez l'image en archive avec `docker save`, extrayez-la dans un dossier et explorez-la : retrouvez le manifeste, le fichier de configuration et les couches. Listez le contenu d'une couche.
-
-**Questions de réflexion :**
-
-- Combien de couches compte `ubuntu:24.04` ? Que contiennent-elles ?
-- Deux images construites `FROM ubuntu:24.04` sont présentes sur votre machine. Combien de fois les couches d'Ubuntu sont-elles stockées sur disque ? Et téléchargées ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 1</summary>
-{:/nomarkdown}
-
-```bash
-docker pull ubuntu:24.04
-docker buildx imagetools inspect ubuntu:24.04
-docker buildx imagetools inspect --raw ubuntu:24.04
-```
-
-La première commande affiche le digest de l'index puis une entrée par plateforme (`linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/ppc64le`, `linux/s390x`...), chacune avec le digest de son propre manifeste. C'est ce mécanisme qui permet au même nom d'image de fonctionner sur un Mac Apple Silicon et sur un serveur x86.
-
-```bash
-docker image inspect -f '{{.Architecture}}' ubuntu:24.04
-docker image inspect -f '{{json .RootFS.Layers}}' ubuntu:24.04
-```
-
-```bash
-mkdir -p ~/tp3-anatomie && cd ~/tp3-anatomie
-docker save ubuntu:24.04 -o ubuntu.tar
-mkdir ubuntu && tar -xf ubuntu.tar -C ubuntu
-ls -R ubuntu | head -20
-cat ubuntu/manifest.json
-```
-
-Les versions récentes de Docker exportent au format OCI : un fichier `index.json`, un fichier `manifest.json` et un dossier `blobs/sha256/` qui contient tous les éléments, chacun nommé par son digest. `manifest.json` indique lequel est la configuration (`Config`) et lesquels sont les couches (`Layers`) :
-
-```bash
-cat ubuntu/blobs/sha256/<digest de Config>        # la configuration JSON
-tar -tf ubuntu/blobs/sha256/<digest d'une couche> | head    # les fichiers d'une couche
-```
-
-Dans la configuration, on retrouve notamment `architecture`, `os`, `config.Cmd` (`["/bin/bash"]`), `rootfs.diff_ids` (une entrée par couche) et `history` (une entrée par instruction de construction).
-
-`ubuntu:24.04` ne compte qu'**une** couche : tout le système de fichiers de base. Les images que vous allez construire en ajouteront une par instruction qui modifie des fichiers.
-
-Les couches sont **partagées** : deux images construites sur `ubuntu:24.04` réutilisent les mêmes couches de base, stockées et téléchargées une seule fois. C'est pourquoi standardiser les images de base d'une équipe économise disque et bande passante.
-
-```bash
-cd ~/tp3
-```
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 2 - Du shell au Dockerfile : le back, V1
+## Étape 1 - Du shell au Dockerfile : le back, V1
 
 Voici la procédure qu'un administrateur suivrait pour installer le back sur un serveur **Ubuntu 24.04 vierge**, connecté en root :
 
@@ -161,7 +88,7 @@ Les instructions principales d'un Dockerfile :
 - Que contient l'image en plus du jar nécessaire à l'exécution ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 2</summary>
+<details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
 
 `back/Dockerfile`, V1 :
@@ -212,7 +139,7 @@ Chaque `RUN` s'exécute dans un nouveau shell : un `RUN cd /app` n'aurait aucun 
 
 ---
 
-## Étape 3 - Du shell au Dockerfile : le front, V1
+## Étape 2 - Du shell au Dockerfile : le front, V1
 
 Voici la procédure d'installation du front, sur une machine où **Node.js 22** est déjà installé (image officielle `node:22`), en root :
 
@@ -245,7 +172,7 @@ Le script `docker-entrypoint.sh` écrit l'URL du back dans `/app/dist/browser/as
 - Pourquoi le script se termine-t-il par `exec serve ...` plutôt que par `serve ...` ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 3</summary>
+<details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
 
 `front/Dockerfile`, V1 :
@@ -299,7 +226,7 @@ Pour la même raison, `exec serve ...` **remplace** le processus du script par `
 
 ---
 
-## Étape 4 - L'ordre des instructions et le cache de build
+## Étape 3 - L'ordre des instructions et le cache de build
 
 À chaque instruction, le builder vérifie s'il possède déjà une couche produite par **la même instruction, sur la même couche parente**. Pour `COPY` et `ADD`, il compare aussi le contenu des fichiers copiés. Si tout correspond, il réutilise la couche (`CACHED`). Dès qu'une instruction est invalidée, **toutes les suivantes** sont reconstruites.
 
@@ -316,7 +243,7 @@ Pour la même raison, `exec serve ...` **remplace** le processus du script par `
 - Quelles parties d'un projet changent souvent, lesquelles rarement ? Comment en déduire l'ordre des instructions ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 4</summary>
+<details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
 
 ```bash
@@ -358,7 +285,7 @@ Règle générale : du plus stable au plus changeant. Image de base, puis paquet
 
 ---
 
-## Étape 5 - `.dockerignore` et secrets
+## Étape 4 - `.dockerignore` et secrets
 
 ### Le contexte de build
 
@@ -391,7 +318,7 @@ Imaginons que le back ait besoin d'un mot de passe pendant le build, pour accéd
 - Comment fournir correctement un secret au build ? Et à l'exécution ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
+<details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
 
 Avec `node_modules` présent, le contexte du front passe de quelques Mo à plusieurs centaines. Le transfert ralentit chaque build, et `COPY . .` place dans l'image un `node_modules` construit **pour votre poste**, qui peut contenir des binaires compilés pour la mauvaise plateforme (macOS au lieu de Linux, par exemple).
@@ -436,6 +363,89 @@ Les bonnes pratiques :
 
 - **au build** : `RUN --mount=type=secret,id=repo_password ...` avec `docker build --secret id=repo_password,src=<fichier>`. Le secret est monté le temps d'une seule instruction et n'est écrit dans aucune couche ;
 - **à l'exécution** : variable d'environnement (`docker run -e`) ou fichier monté en lecture seule, fournis par l'orchestrateur, jamais dans l'image.
+
+{::nomarkdown}
+</details>
+{:/nomarkdown}
+
+---
+
+## Étape 5 - Choisir son image de base
+
+| Famille | Exemples | Taille | Débogage | Compatibilité |
+| --- | --- | --- | --- | --- |
+| Debian / Ubuntu | `ubuntu:24.04`, `debian:bookworm`, `eclipse-temurin:17-jdk` | La plus grosse | Shell, gestionnaire de paquets, outils courants | glibc : compatible avec quasiment tous les binaires Linux |
+| `-slim` | `debian:bookworm-slim`, `node:22-slim` | Moyenne | Shell et `apt`, peu d'outils | glibc |
+| Alpine | `alpine:3`, `node:22-alpine`, `eclipse-temurin:17-jdk-alpine` | Très petite | Shell `ash` (BusyBox), `apk` | **musl** au lieu de glibc : certains binaires précompilés ne fonctionnent pas, comportements parfois différents (DNS, performances) |
+| Distroless | `gcr.io/distroless/java17-debian12` | Petite | **Aucun shell**, aucun gestionnaire de paquets | glibc |
+
+**Ce que vous devez faire :**
+
+- Téléchargez les images suivantes et comparez leurs tailles : `eclipse-temurin:17-jdk`, `eclipse-temurin:17-jre`, `eclipse-temurin:17-jre-alpine`, `gcr.io/distroless/java17-debian12`.
+- Lancez un shell dans `eclipse-temurin:17-jre`, puis dans l'image distroless. Que se passe-t-il ?
+- Affichez la liste des outils présents dans le JDK et dans le JRE (`ls /opt/java/openjdk/bin`). Lequel contient `javac` ?
+- Réécrivez le back V2 en partant de l'image officielle `maven:3-eclipse-temurin-17` au lieu d'installer Java et Maven avec `apt`. Comparez la taille et la lisibilité du Dockerfile.
+
+**Questions de réflexion :**
+
+- Peut-on construire le back V2 à partir de `eclipse-temurin:17-jre` ? Et à partir de l'image distroless ?
+- Quelle image choisiriez-vous pour la production ? Pour déboguer un problème en recette ?
+
+> Sur un Mac Apple Silicon ou une machine ARM, si un `docker pull` échoue avec `no matching manifest`, l'image n'existe pas pour votre architecture. Vérifiez-le avec `docker buildx imagetools inspect`, comme à l'étape 1.
+
+{::nomarkdown}
+<details><summary>Solution - Étape 5</summary>
+{:/nomarkdown}
+
+```bash
+docker pull eclipse-temurin:17-jdk
+docker pull eclipse-temurin:17-jre
+docker pull eclipse-temurin:17-jre-alpine
+docker pull gcr.io/distroless/java17-debian12
+docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'temurin|distroless'
+```
+
+Le JRE est sensiblement plus petit que le JDK, et la variante alpine encore plus. Le JDK contient le compilateur `javac`, les outils de diagnostic (`jcmd`, `jmap`...) et `jlink` ; le JRE ne contient que de quoi **exécuter** du bytecode (`java`).
+
+```bash
+docker run --rm -it eclipse-temurin:17-jre sh          # fonctionne
+docker run --rm -it gcr.io/distroless/java17-debian12 sh
+```
+
+L'image distroless a pour point d'entrée `java -jar` : `sh` est interprété comme le nom d'un jar, et Java échoue. Avec `--entrypoint sh`, Docker indique que l'exécutable est introuvable. Pas de shell, donc pas de `docker exec ... sh` pour déboguer, mais aussi beaucoup moins d'outils exploitables par un attaquant et moins de vulnérabilités signalées par les scanners.
+
+Back V2 sur l'image Maven officielle :
+
+```dockerfile
+FROM maven:3-eclipse-temurin-17
+
+ARG APP_VERSION=dev
+LABEL org.opencontainers.image.title="tp3-back" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B dependency:go-offline
+COPY src ./src
+RUN mvn -B package -DskipTests \
+ && cp target/openapi-workshop-*.jar /app/app.jar \
+ && rm -rf target
+
+RUN mkdir /data && chown ubuntu:ubuntu /data
+VOLUME /data
+ENV DB_PATH=/data/app.db
+
+USER ubuntu
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+CMD ["--server.port=8081"]
+```
+
+Plus besoin d'`apt` : Java et Maven sont fournis, maintenus et mis à jour par leurs éditeurs. Vérifiez que l'utilisateur `ubuntu` existe dans cette image (`docker run --rm maven:3-eclipse-temurin-17 id ubuntu`) ; sinon, créez un utilisateur dédié avec `useradd`.
+
+On ne peut pas compiler à partir du JRE (pas de `javac`), ni à partir de distroless (pas de shell pour exécuter `RUN`, pas de Maven). Avec un Dockerfile à une étape, l'image qui compile est aussi celle qui s'exécute : on est condamné au JDK. Le build multi-étapes permet de compiler dans une image JDK, puis de ne copier que le jar dans une image JRE ou distroless.
+
+En production, on privilégie une image minimale : distroless ou JRE alpine, si la compatibilité musl est vérifiée. Pour déboguer, une image avec shell est plus pratique, ou un conteneur de débogage attaché temporairement au conteneur de production (`docker debug`, `kubectl debug`).
 
 {::nomarkdown}
 </details>
@@ -615,89 +625,6 @@ docker history tp3-front:v2
 Un `ARG` déclaré avant `FROM` n'est visible que dans les lignes `FROM`. Pour l'utiliser plus loin, il faut le redéclarer (sans valeur) après `FROM` : `ARG NODE_VERSION`.
 
 Le passage à `alpine` et le nettoyage des caches réduisent nettement la taille. Mais `node_modules` (tout l'outillage de compilation Angular), Node.js lui-même et les sources restent dans l'image, alors que l'exécution n'a besoin que du dossier `dist/browser` et d'un serveur web. Supprimer `node_modules` dans une couche suivante ne servirait à rien (étape 6), et le supprimer dans la couche de `npm ci` casserait le build. Là encore, le build multi-étapes est la solution.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 8 - Choisir son image de base
-
-| Famille | Exemples | Taille | Débogage | Compatibilité |
-| --- | --- | --- | --- | --- |
-| Debian / Ubuntu | `ubuntu:24.04`, `debian:bookworm`, `eclipse-temurin:17-jdk` | La plus grosse | Shell, gestionnaire de paquets, outils courants | glibc : compatible avec quasiment tous les binaires Linux |
-| `-slim` | `debian:bookworm-slim`, `node:22-slim` | Moyenne | Shell et `apt`, peu d'outils | glibc |
-| Alpine | `alpine:3`, `node:22-alpine`, `eclipse-temurin:17-jdk-alpine` | Très petite | Shell `ash` (BusyBox), `apk` | **musl** au lieu de glibc : certains binaires précompilés ne fonctionnent pas, comportements parfois différents (DNS, performances) |
-| Distroless | `gcr.io/distroless/java17-debian12` | Petite | **Aucun shell**, aucun gestionnaire de paquets | glibc |
-
-**Ce que vous devez faire :**
-
-- Téléchargez les images suivantes et comparez leurs tailles : `eclipse-temurin:17-jdk`, `eclipse-temurin:17-jre`, `eclipse-temurin:17-jre-alpine`, `gcr.io/distroless/java17-debian12`.
-- Lancez un shell dans `eclipse-temurin:17-jre`, puis dans l'image distroless. Que se passe-t-il ?
-- Affichez la liste des outils présents dans le JDK et dans le JRE (`ls /opt/java/openjdk/bin`). Lequel contient `javac` ?
-- Réécrivez le back V2 en partant de l'image officielle `maven:3-eclipse-temurin-17` au lieu d'installer Java et Maven avec `apt`. Comparez la taille et la lisibilité du Dockerfile.
-
-**Questions de réflexion :**
-
-- Peut-on construire le back V2 à partir de `eclipse-temurin:17-jre` ? Et à partir de l'image distroless ?
-- Quelle image choisiriez-vous pour la production ? Pour déboguer un problème en recette ?
-
-> Sur un Mac Apple Silicon ou une machine ARM, si un `docker pull` échoue avec `no matching manifest`, l'image n'existe pas pour votre architecture. Vérifiez-le avec `docker buildx imagetools inspect`, comme à l'étape 1.
-
-{::nomarkdown}
-<details><summary>Solution - Étape 8</summary>
-{:/nomarkdown}
-
-```bash
-docker pull eclipse-temurin:17-jdk
-docker pull eclipse-temurin:17-jre
-docker pull eclipse-temurin:17-jre-alpine
-docker pull gcr.io/distroless/java17-debian12
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'temurin|distroless'
-```
-
-Le JRE est sensiblement plus petit que le JDK, et la variante alpine encore plus. Le JDK contient le compilateur `javac`, les outils de diagnostic (`jcmd`, `jmap`...) et `jlink` ; le JRE ne contient que de quoi **exécuter** du bytecode (`java`).
-
-```bash
-docker run --rm -it eclipse-temurin:17-jre sh          # fonctionne
-docker run --rm -it gcr.io/distroless/java17-debian12 sh
-```
-
-L'image distroless a pour point d'entrée `java -jar` : `sh` est interprété comme le nom d'un jar, et Java échoue. Avec `--entrypoint sh`, Docker indique que l'exécutable est introuvable. Pas de shell, donc pas de `docker exec ... sh` pour déboguer, mais aussi beaucoup moins d'outils exploitables par un attaquant et moins de vulnérabilités signalées par les scanners.
-
-Back V2 sur l'image Maven officielle :
-
-```dockerfile
-FROM maven:3-eclipse-temurin-17
-
-ARG APP_VERSION=dev
-LABEL org.opencontainers.image.title="tp3-back" \
-      org.opencontainers.image.version="${APP_VERSION}"
-
-WORKDIR /app
-COPY pom.xml .
-RUN mvn -B dependency:go-offline
-COPY src ./src
-RUN mvn -B package -DskipTests \
- && cp target/openapi-workshop-*.jar /app/app.jar \
- && rm -rf target
-
-RUN mkdir /data && chown ubuntu:ubuntu /data
-VOLUME /data
-ENV DB_PATH=/data/app.db
-
-USER ubuntu
-EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-CMD ["--server.port=8081"]
-```
-
-Plus besoin d'`apt` : Java et Maven sont fournis, maintenus et mis à jour par leurs éditeurs. Vérifiez que l'utilisateur `ubuntu` existe dans cette image (`docker run --rm maven:3-eclipse-temurin-17 id ubuntu`) ; sinon, créez un utilisateur dédié avec `useradd`.
-
-On ne peut pas compiler à partir du JRE (pas de `javac`), ni à partir de distroless (pas de shell pour exécuter `RUN`, pas de Maven). Avec un Dockerfile à une étape, l'image qui compile est aussi celle qui s'exécute : on est condamné au JDK. Le build multi-étapes permet de compiler dans une image JDK, puis de ne copier que le jar dans une image JRE ou distroless.
-
-En production, on privilégie une image minimale : distroless ou JRE alpine, si la compatibilité musl est vérifiée. Pour déboguer, une image avec shell est plus pratique, ou un conteneur de débogage attaché temporairement au conteneur de production (`docker debug`, `kubectl debug`).
 
 {::nomarkdown}
 </details>
