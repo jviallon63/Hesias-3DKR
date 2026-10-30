@@ -632,7 +632,7 @@ Le passage à `alpine` et le nettoyage des caches réduisent nettement la taille
 
 ---
 
-## Étape 9 - Options de build, tags et versions
+## Étape 8 - Options de build, tags et versions
 
 Un nom d'image complet a la forme `registre/espace/nom:tag`, par exemple `ghcr.io/mon-equipe/tp3-back:1.0.0`. Sans registre, Docker Hub est utilisé ; sans tag, `latest`.
 
@@ -651,7 +651,7 @@ Le **versionnage sémantique** (`MAJEUR.MINEUR.CORRECTIF`) indique la nature des
 - Pourquoi ne faut-il jamais republier une image différente sous un tag déjà publié comme `1.0.0` ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 9</summary>
+<details><summary>Solution - Étape 8</summary>
 {:/nomarkdown}
 
 ```bash
@@ -684,7 +684,7 @@ En production, on déploie une version **immuable** (`1.0.1`), ou mieux, un dige
 
 ---
 
-## Étape 10 - Tout lancer et faire le bilan
+## Étape 9 - Tout lancer et faire le bilan
 
 **Ce que vous devez faire :**
 
@@ -709,7 +709,7 @@ En production, on déploie une version **immuable** (`1.0.1`), ou mieux, un dige
 - Pour chaque image V2, estimez la part de la taille réellement nécessaire à l'exécution. Qu'est-ce qui vous empêche de supprimer le reste ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 10</summary>
+<details><summary>Solution - Étape 9</summary>
 {:/nomarkdown}
 
 ```bash
