@@ -13,12 +13,6 @@ Ce TP n'utilise aucun `Dockerfile`. Le fil rouge est l'image officielle `nginx`,
 
 > Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
 
-Créez un dossier de travail **dans votre répertoire personnel** (Colima et Docker Desktop ne partagent par défaut que celui-ci avec leur VM) :
-
-```bash
-mkdir -p ~/tp2 && cd ~/tp2
-```
-
 ---
 
 ## Objectifs
@@ -41,13 +35,12 @@ Une image n'est pas qu'un système de fichiers : elle contient aussi des **méta
 
 **Ce que vous devez faire :**
 
-- Téléchargez l'image `nginx` avec le tag `stable-alpine`, puis listez vos images locales.
+- Téléchargez l'image `nginx:stable-alpine`, puis listez vos images locales.
 - Affichez l'historique de l'image : les couches qui la composent et l'instruction qui a produit chacune d'elles.
-- Inspectez l'image et relevez : la commande par défaut (`Cmd`), le point d'entrée (`Entrypoint`), les ports déclarés (`ExposedPorts`), les variables d'environnement (`Env`) et le signal d'arrêt (`StopSignal`).
+- Inspectez l'image et relevez : la commande par défaut (`Cmd`), le point d'entrée (`Entrypoint`), les ports déclarés (`ExposedPorts`), les variables d'environnement (`Env`).
 
 **Questions de réflexion :**
 
-- Pourquoi préférer un tag comme `stable-alpine` à `latest` ? Est-ce suffisant pour garantir que deux machines exécutent exactement la même image ?
 - Certaines lignes de l'historique ont une taille de `0B`. Qu'est-ce que cela signifie ?
 
 {::nomarkdown}
@@ -56,8 +49,8 @@ Une image n'est pas qu'un système de fichiers : elle contient aussi des **méta
 
 ```bash
 docker pull nginx:stable-alpine
-docker images
-docker history nginx:stable-alpine
+docker image ls
+docker history nginx:stable-alpine (--no-trunc)
 docker image inspect nginx:stable-alpine
 ```
 
@@ -68,19 +61,6 @@ docker image inspect -f '{{.Config.Entrypoint}} {{.Config.Cmd}}' nginx:stable-al
 docker image inspect -f '{{json .Config.ExposedPorts}}' nginx:stable-alpine
 docker image inspect -f '{{json .Config.Env}}' nginx:stable-alpine
 docker image inspect -f '{{.Config.StopSignal}}' nginx:stable-alpine
-```
-
-On obtient notamment :
-
-- `Entrypoint` : `[/docker-entrypoint.sh]`, un script qui prépare la configuration au démarrage (il servira à l'étape 6) ;
-- `Cmd` : `[nginx -g daemon off;]`, la commande passée en argument au point d'entrée. `daemon off` garde nginx au premier plan : s'il passait en arrière-plan, le processus principal se terminerait et le conteneur avec lui ;
-- `ExposedPorts` : `{"80/tcp":{}}` ;
-- `StopSignal` : `SIGQUIT`, le signal d'arrêt propre de nginx.
-
-Un tag est une **étiquette mobile** : `stable-alpine` pointera vers une nouvelle image à la prochaine version de nginx ou d'Alpine. Il est plus explicite que `latest`, mais pas immuable. Pour figer exactement une image, on la référence par son **digest** (empreinte du contenu), visible avec `docker images --digests` :
-
-```bash
-docker pull nginx@sha256:<digest>
 ```
 
 Les lignes à `0B` de `docker history` correspondent à des instructions qui ne modifient que les métadonnées (`CMD`, `EXPOSE`, `ENV`, `STOPSIGNAL`...) et ne créent donc pas de fichiers.
@@ -112,59 +92,40 @@ stateDiagram-v2
 **Ce que vous devez faire :**
 
 - Créez un conteneur nommé `cycle` à partir de `nginx:stable-alpine` **sans le démarrer**. Vérifiez son état avec `docker ps -a`.
-- Démarrez-le, puis mettez-le en pause. Essayez d'exécuter une commande dedans pendant la pause (`docker exec cycle ls`). Sortez-le de pause.
-- Arrêtez-le avec `docker stop` et relevez son code de sortie.
-- Redémarrez-le, puis arrêtez-le cette fois avec `docker kill`. Relevez le nouveau code de sortie.
-- Affichez uniquement les conteneurs arrêtés, puis un tableau personnalisé avec le nom, l'image et le statut de chaque conteneur.
+- Démarrez-le, vérifiez que le container tourne. 
+- Executez des commandes dans le container, par exemple `ps -ef` pour lister les process, et affichez le script d'entrypoint de l'image.
+- Puis mettez-le en pause/unpause. Essayez d'exécuter les commandes dedans. Affichez le status
+- Arrêtez proprement le container et relevez son code de sortie avec `inspect`.
+- Redémarrez-le, puis arrêtez-le cette fois avec docker `kill`. Relevez le nouveau code de sortie.
 - Essayez de supprimer `cycle` alors qu'il tourne, puis supprimez-le.
 
-**Questions de réflexion :**
-
-- Quelle est la différence entre `docker stop` et `docker kill` ? Pourquoi les codes de sortie diffèrent-ils ?
-- Que fait `docker stop` si le processus ignore le signal d'arrêt ?
-- Que devient un processus mis en pause ? Consomme-t-il encore de la mémoire ? du CPU ?
+- Notez que le container est supprimé, mais l'image reste localement.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
 
 ```bash
-docker create --name cycle nginx:stable-alpine
-docker ps -a                       # STATUS : Created
+docker container create --name cycle nginx:stable-alpine
+docker container ps -a                       # STATUS : Created
 
-docker start cycle
-docker pause cycle
-docker exec cycle ls               # erreur : le conteneur est en pause
-docker unpause cycle
+docker container start cycle
+docker container exec cycle ps -ef
+docker container exec cycle cat /docker-entrypoint.sh
+docker container pause cycle
+docker container unpause cycle
 
-docker stop cycle
-docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' cycle    # exited 0
+docker container stop cycle
+docker container inspect -f '{{.State.Status}} {{.State.ExitCode}}' cycle    # exited 0
 
-docker start cycle
-docker kill cycle
-docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' cycle    # exited 137
+docker container start cycle
+docker container kill cycle
+docker container inspect -f '{{.State.Status}} {{.State.ExitCode}}' cycle    # exited 137
+
+docker container start cycle
+docker container rm cycle        # refusé : le conteneur tourne
+docker container rm -f cycle     # arrêt forcé (SIGKILL) puis suppression
 ```
-
-Filtrer et formater la liste des conteneurs :
-
-```bash
-docker ps -a --filter status=exited
-docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
-```
-
-Supprimer un conteneur en cours d'exécution échoue, sauf avec `-f` :
-
-```bash
-docker start cycle
-docker rm cycle        # refusé : le conteneur tourne
-docker rm -f cycle     # arrêt forcé (SIGKILL) puis suppression
-```
-
-`docker stop` envoie le signal d'arrêt déclaré par l'image (`SIGQUIT` pour nginx, `SIGTERM` par défaut), qui laisse au processus le temps de terminer proprement ses requêtes. nginx sort alors avec le code `0`. Si le processus est toujours là après le délai de grâce (10 secondes par défaut, modifiable avec `docker stop -t`), Docker envoie `SIGKILL`.
-
-`docker kill` envoie directement `SIGKILL` (signal 9), qui ne peut être ni intercepté ni ignoré. Par convention, un processus tué par un signal sort avec le code `128 + numéro du signal`, soit `137`. Un code `137` dans un `docker ps -a` doit toujours faire penser à un arrêt brutal, y compris par manque de mémoire (étape 8).
-
-`docker pause` gèle les processus avec le cgroup *freezer* : ils ne reçoivent plus de temps CPU mais conservent toute leur mémoire. C'est différent de `stop`, qui termine les processus.
 
 {::nomarkdown}
 </details>
@@ -178,11 +139,11 @@ L'instruction `EXPOSE 80` de l'image est **documentaire** : elle indique sur que
 
 **Ce que vous devez faire :**
 
-- Lancez en arrière-plan un conteneur `web` à partir de `nginx:stable-alpine`, en publiant son port 80 sur le port 8080 de l'hôte.
+- En utilisant l'instruction `run`, et en une seule commande : Lancez en arrière-plan un conteneur nommé `web` à partir de `nginx:stable-alpine`, en publiant son port 80 sur le port 8080 de l'hôte.
 - Ouvrez <http://localhost:8080> dans un navigateur, ou utilisez `curl`.
 - Affichez les correspondances de ports du conteneur avec `docker port`.
 - Lancez un second conteneur `web2` qui publie lui aussi sur le port 8080 de l'hôte. Lisez l'erreur.
-- Relancez `web2` en le rendant accessible **uniquement depuis votre machine**, sur le port 8081.
+- Relancez `web2` en le rendant accessible sur le port 8081.
 
 **Questions de réflexion :**
 
@@ -194,35 +155,26 @@ L'instruction `EXPOSE 80` de l'image est **documentaire** : elle indique sur que
 {:/nomarkdown}
 
 ```bash
-docker run -d --name web -p 8080:80 nginx:stable-alpine
+docker container run -d --name web -p 8080:80 nginx:stable-alpine
 curl http://localhost:8080
-docker port web
-```
-
-`-d` (*detached*) rend la main immédiatement et affiche l'identifiant du conteneur. `docker port` affiche par exemple :
-
-```text
-80/tcp -> 0.0.0.0:8080
-80/tcp -> [::]:8080
+docker container port web
 ```
 
 Le second lancement sur le même port échoue :
 
 ```bash
-docker run -d --name web2 -p 8080:80 nginx:stable-alpine
+docker container run -d --name web2 -p 8080:80 nginx:stable-alpine
 # Error response from daemon: ... Bind for 0.0.0.0:8080 failed: port is already allocated
 ```
 
 Le conteneur `web2` a tout de même été **créé** (état `Created`) : il faut le supprimer avant de réutiliser son nom.
 
 ```bash
-docker rm web2
-docker run -d --name web2 -p 127.0.0.1:8081:80 nginx:stable-alpine
+docker container rm web2
+docker container run -d --name web2 -p 127.0.0.1:8081:80 nginx:stable-alpine
 ```
 
 Chaque conteneur a sa propre pile réseau (namespace réseau) et donc son propre port 80. En revanche, le port publié est un port de l'**hôte**, qui ne peut être attribué qu'une fois.
-
-Par défaut, `-p 8080:80` écoute sur toutes les interfaces (`0.0.0.0`) : le service est joignable depuis le réseau local, et sous Linux, les règles iptables de Docker contournent le pare-feu de la machine. Préfixer avec `127.0.0.1` limite l'accès à la machine elle-même, ce qu'il faut faire pour tout service de développement ou toute base de données.
 
 `-P` publie tous les ports déclarés par `EXPOSE` sur des ports aléatoires de l'hôte, que l'on retrouve avec `docker port`.
 
@@ -254,19 +206,19 @@ Un conteneur bien conçu écrit ses logs sur sa sortie standard et sa sortie d'e
 {:/nomarkdown}
 
 ```bash
-docker logs web
-docker logs -f web               # Ctrl+C pour arrêter le suivi, pas le conteneur
-docker logs --tail 5 -t web
-docker logs --since 2m web
+docker container logs web
+docker container logs -f web               # Ctrl+C pour arrêter le suivi, pas le conteneur
+docker container logs --tail 5 -t web
+docker container logs --since 2m web
 ```
 
 ```bash
-docker exec -it web sh
+docker container exec -it web sh
 ls -l /var/log/nginx
 nginx -t
 exit
 
-docker exec web nginx -t
+docker container exec web nginx -t
 ```
 
 Dans l'image, les fichiers de logs sont des liens symboliques vers les sorties standard du processus :
@@ -300,15 +252,6 @@ Tout ce qui est écrit dans un conteneur disparaît avec lui. Deux mécanismes p
 - Créez un fichier `~/tp2/site/index.html` contenant un titre de votre choix.
 - Lancez un conteneur `site` qui sert ce dossier à la place de la page par défaut de nginx (le contenu servi se trouve dans `/usr/share/nginx/html`), publié sur le port 8082. Vérifiez dans le navigateur.
 - Modifiez `index.html` **sur l'hôte** et rechargez la page, sans toucher au conteneur.
-- Essayez de créer un fichier dans `/usr/share/nginx/html` depuis le conteneur. Faites en sorte que cela soit impossible en relançant `site` avec un montage en lecture seule.
-- Créez maintenant un volume nommé `site-data`, et lancez un conteneur `persist` qui le monte sur `/usr/share/nginx/html`. Listez le contenu du volume depuis le conteneur.
-- Modifiez `index.html` depuis le conteneur `persist`, supprimez ce conteneur, puis relancez-en un nouveau avec le même volume. Votre modification a-t-elle survécu ?
-- Listez et inspectez les volumes.
-
-**Questions de réflexion :**
-
-- Le volume `site-data` était vide à sa création. Pourquoi contient-il la page par défaut de nginx au premier lancement ? Est-ce aussi le cas avec un bind mount ?
-- Dans quels cas choisir un bind mount, et dans quels cas un volume nommé ?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
@@ -320,55 +263,12 @@ Bind mount :
 mkdir -p ~/tp2/site
 echo '<h1>Servi depuis mon hôte</h1>' > ~/tp2/site/index.html
 
-docker run -d --name site -p 8082:80 -v "$PWD/site":/usr/share/nginx/html nginx:stable-alpine
+docker container run -d --name site -p 8082:80 -v "$PWD/site":/usr/share/nginx/html nginx:stable-alpine
 curl http://localhost:8082
 
 echo '<h1>Modifié sans toucher au conteneur</h1>' > ~/tp2/site/index.html
 curl http://localhost:8082
 ```
-
-Le conteneur voit le dossier de l'hôte en direct : il n'y a pas de copie. Il peut aussi y écrire, et ses fichiers apparaissent sur l'hôte :
-
-```bash
-docker exec site touch /usr/share/nginx/html/depuis-le-conteneur
-ls ~/tp2/site
-```
-
-En lecture seule avec `:ro` :
-
-```bash
-docker rm -f site
-docker run -d --name site -p 8082:80 -v "$PWD/site":/usr/share/nginx/html:ro nginx:stable-alpine
-docker exec site touch /usr/share/nginx/html/test    # Read-only file system
-```
-
-Volume nommé :
-
-```bash
-docker volume create site-data
-docker run -d --name persist -p 8083:80 -v site-data:/usr/share/nginx/html nginx:stable-alpine
-docker exec persist ls /usr/share/nginx/html         # 50x.html index.html
-
-docker exec persist sh -c 'echo "<h1>Je survis au conteneur</h1>" > /usr/share/nginx/html/index.html'
-docker rm -f persist
-docker run -d --name persist -p 8083:80 -v site-data:/usr/share/nginx/html nginx:stable-alpine
-curl http://localhost:8083                            # la modification est toujours là
-
-docker volume ls
-docker volume inspect site-data
-docker inspect -f '{{json .Mounts}}' persist
-```
-
-Quand un volume nommé **vide** est monté sur un dossier qui contient déjà des fichiers dans l'image, Docker copie ces fichiers dans le volume. Un bind mount ne fait jamais cette copie : il masque le contenu de l'image par celui du dossier de l'hôte, même vide.
-
-`docker volume inspect` indique un `Mountpoint` sous `/var/lib/docker/volumes/`. Sous Windows et macOS, ce chemin se trouve dans la VM, pas sur votre disque.
-
-En pratique :
-
-- **bind mount** : partager des fichiers que vous éditez sur l'hôte (code source en développement, fichier de configuration) ;
-- **volume nommé** : stocker les données produites par l'application (base de données, fichiers uploadés), dont Docker gère l'emplacement et les permissions.
-
-La syntaxe `--mount` est plus verbeuse mais plus explicite, et recommandée dans les scripts : `--mount type=volume,source=site-data,target=/usr/share/nginx/html`.
 
 {::nomarkdown}
 </details>
@@ -604,13 +504,8 @@ Pour aller plus loin : `--cpuset-cpus` épingle un conteneur sur des cœurs pré
 
 - Affichez l'espace disque occupé par Docker (images, conteneurs, volumes, cache).
 - Supprimez tous les conteneurs créés dans ce TP, **et seulement eux**.
-- Supprimez le volume `site-data`.
 - Supprimez les images qui ne sont plus utilisées par aucun conteneur.
 - Affichez de nouveau l'espace disque occupé.
-
-**Question de réflexion :**
-
-- Pourquoi `docker rm -f $(docker ps -aq)` est-elle une commande dangereuse sur une machine de travail ?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 9</summary>
@@ -619,8 +514,7 @@ Pour aller plus loin : `--cpuset-cpus` épingle un conteneur sur des cœurs pré
 ```bash
 docker system df
 
-docker rm -f web web2 site persist config mem-ok mem-ko cpu cpu2
-docker volume rm site-data
+docker container rm -f web web2 site config mem-ok mem-ko cpu cpu2
 docker image prune -a
 
 docker system df
@@ -628,7 +522,6 @@ docker system df
 
 `docker image prune -a` supprime toutes les images qu'aucun conteneur n'utilise, pas seulement celles de ce TP. Il demande confirmation : lisez la liste avant de répondre.
 
-`docker rm -f $(docker ps -aq)` supprime **tous** les conteneurs de la machine, y compris ceux qui tournent et qui n'ont rien à voir avec ce TP (une base de données de développement, par exemple). Nommer explicitement ses conteneurs, comme dans ce TP, permet de les cibler précisément.
 
 {::nomarkdown}
 </details>
@@ -640,28 +533,28 @@ docker system df
 
 | Commande | Rôle |
 | --- | --- |
-| `docker pull` | Télécharger une image |
-| `docker images` | Lister les images locales |
-| `docker history` | Afficher les couches d'une image |
+| `docker image pull` | Télécharger une image |
+| `docker image images` | Lister les images locales |
+| `docker image history` | Afficher les couches d'une image |
 | `docker image inspect` | Afficher les métadonnées d'une image |
-| `docker create` / `docker start` | Créer un conteneur / le démarrer |
-| `docker run` | Créer et démarrer un conteneur en une commande |
-| `docker pause` / `docker unpause` | Geler / dégeler les processus d'un conteneur |
-| `docker stop` / `docker kill` | Arrêter proprement / tuer un conteneur |
-| `docker restart` | Arrêter puis redémarrer un conteneur |
-| `docker rm` | Supprimer un conteneur |
-| `docker ps` | Lister les conteneurs (`-a` pour tous, `--filter`, `--format`) |
-| `docker port` | Afficher les ports publiés |
-| `docker logs` | Lire les logs (`-f`, `--tail`, `--since`, `-t`) |
-| `docker exec` | Exécuter une commande dans un conteneur en marche |
+| `docker container create` / `docker container start` | Créer un conteneur / le démarrer |
+| `docker container run` | Créer et démarrer un conteneur en une commande |
+| `docker container pause` / `docker container unpause` | Geler / dégeler les processus d'un conteneur |
+| `docker container stop` / `docker container kill` | Arrêter proprement / tuer un conteneur |
+| `docker container restart` | Arrêter puis redémarrer un conteneur |
+| `docker container rm` | Supprimer un conteneur |
+| `docker container ps` | Lister les conteneurs (`-a` pour tous, `--filter`, `--format`) |
+| `docker container port` | Afficher les ports publiés |
+| `docker container logs` | Lire les logs (`-f`, `--tail`, `--since`, `-t`) |
+| `docker container exec` | Exécuter une commande dans un conteneur en marche |
 | `docker volume` | Créer, lister, inspecter, supprimer des volumes |
-| `docker inspect` | Afficher l'état et la configuration d'un conteneur |
-| `docker stats` | Suivre la consommation de ressources |
-| `docker top` | Lister les processus d'un conteneur |
-| `docker update` | Modifier les limites d'un conteneur à chaud |
+| `docker container inspect` | Afficher l'état et la configuration d'un conteneur |
+| `docker container stats` | Suivre la consommation de ressources |
+| `docker container top` | Lister les processus d'un conteneur |
+| `docker container update` | Modifier les limites d'un conteneur à chaud |
 | `docker system df` / `docker image prune` | Mesurer et libérer l'espace disque |
 
-| Option de `docker run` | Rôle |
+| Option de `docker container run` | Rôle |
 | --- | --- |
 | `-d` | Lancer en arrière-plan |
 | `--name` | Nommer le conteneur |
