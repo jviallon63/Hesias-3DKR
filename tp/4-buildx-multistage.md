@@ -34,10 +34,9 @@ L'outil de ce TP est **Buildx**, le client de build de Docker, qui pilote le mot
 <div class="section objective">
 
 1. Séparer construction et exécution avec un Dockerfile multi-étapes
-2. Utiliser les montages de cache BuildKit pour accélérer les builds sans alourdir les images
-3. Choisir une image d'exécution minimale et non root
-4. Construire et publier une image multi-plateforme sans émulation inutile
-5. Appliquer un schéma de tags versionné et traçable
+2. Choisir une image d'exécution minimale et non root
+3. Construire et publier une image multi-plateforme sans émulation inutile
+4. Appliquer un schéma de tags versionné et traçable
 
 </div>
 
@@ -81,7 +80,7 @@ RUN mkdir /data && chown ubuntu:ubuntu /data
 USER app
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-CMD ["--server.port=8081"]
+CMD ["--server.port=8080"]
 ```
 
 ```bash
@@ -96,8 +95,7 @@ L'image ne contient plus ni Maven, ni le JDK, ni `~/.m2`, ni les sources : seule
 ```bash
 docker buildx build --target build -t tp4-back:build back/
 docker container run --rm -it tp4-back:build bash
-ls -lh target/*.jar
-exit
+ls -l target/*.jar
 ```
 
 `--target` arrête le build à l'étape indiquée. C'est l'outil de débogage du multi-étapes : on inspecte le résultat intermédiaire sans toucher au Dockerfile.
@@ -174,7 +172,6 @@ RUN npm ci && npm cache clean --force
 RUN npx ng build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine
-ARG APP_VERSION=dev
 
 COPY docker/default.conf /etc/nginx/conf.d/default.conf
 COPY --chmod=755 docker/40-backend-url.sh /docker-entrypoint.d/40-backend-url.sh
@@ -186,11 +183,10 @@ EXPOSE 4200
 
 ```bash
 docker buildx build -t tp4-front-nginx:1.0.0 front/
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-front'
+docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
 
-docker run -d --name back -p 8080:8080 tp4-back:1.0.0
-docker run -d --name front -p 4200:8080 tp4-front-nginx:1.0.0
-curl http://localhost:4200/assets/config.js
+docker container run -d --name back -p 8080:8080 tp4-back:1.0.0
+docker container run -d --name front -p 4200:4200 tp4-front-nginx:1.0.0
 ```
 
 L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `CMD` (`nginx -g daemon off;`) de son image de base. Le point d'entrée exécute les scripts de `/docker-entrypoint.d/` dans l'ordre alphabétique (d'où le préfixe `40-`), puis lance nginx avec `exec`.

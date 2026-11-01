@@ -10,5 +10,5 @@ vendor/
 .bundle/
 
 **/*.db
-**/back/**/*.*
-**/front/**/*.*
+**/back/app/**/*.*
+**/front/app/**/*.*
