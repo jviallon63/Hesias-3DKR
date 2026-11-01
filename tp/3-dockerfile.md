@@ -20,16 +20,22 @@ La démarche est celle d'un projet réel :
 
 Clonez le dépôt de l'application de test [sample-app](https://github.com/jviallon63/sample-app). Il contient deux dossiers : `back/` (projet Maven) et `front/` (projet Angular). Le readme décrit comment executer chaque service. Vous n'avez besoin **ni de Java, ni de Maven, ni de Node.js** sur votre poste : tout se passe dans les images.
 
+```mermaid
+flowchart LR
+      User[Utilisateur / navigateur] -->|HTTP :4200| Front[Front-end Angular]
+      Front -->|Appels API depuis le navigateur :8081/api| Back[Back-end Spring Boot]
+      Back -->|/data/app.db| Database[(Base SQLite)]
+```
+
 ---
 
 ## Objectifs
 
 <div class="section objective">
 
-1. Lire la structure interne d'une image : index, manifeste, configuration et couches
-2. Traduire une procédure d'installation en `Dockerfile` en utilisant les instructions principales
-3. Optimiser la taille d'une image et éviter d'y laisser des fichiers inutiles ou des secrets
-4. Construire, versionner et étiqueter ses images
+1. Traduire une procédure d'installation en `Dockerfile` en utilisant les instructions principales
+2. Optimiser la taille d'une image et éviter d'y laisser des fichiers inutiles ou des secrets
+3. Construire, versionner et étiqueter ses images
 
 </div>
 
@@ -40,38 +46,22 @@ Clonez le dépôt de l'application de test [sample-app](https://github.com/jvial
 Voici la procédure qu'un administrateur suivrait pour installer le back sur un serveur **Ubuntu 24.04 vierge**, connecté en root :
 
 ```bash
-export DEBIAN_FRONTEND=noninteractive
+## Installation pré-requis
 apt-get update
 apt-get install -y openjdk-17-jdk-headless maven
 
+## Compilation
 mkdir -p /app
 cp -r <dossier back du dépôt>/. /app/
 cd /app
 mvn package -DskipTests
 
+## Execution
 mkdir -p /data
 java -jar target/openapi-workshop-1.0.0.jar
 ```
 
 L'application écoute sur le port `8081`, sous le chemin `/api`, et stocke sa base SQLite dans `/data/app.db`.
-
-Les instructions principales d'un Dockerfile :
-
-| Instruction | Rôle |
-| --- | --- |
-| `FROM` | Image de départ |
-| `RUN` | Exécuter une commande pendant la construction (crée une couche) |
-| `COPY` | Copier des fichiers du contexte de build vers l'image |
-| `ADD` | Comme `COPY`, avec en plus l'extraction automatique des archives tar locales et le téléchargement d'URL |
-| `WORKDIR` | Définir (et créer si besoin) le répertoire courant des instructions suivantes et du conteneur |
-| `ENV` | Définir une variable d'environnement, présente pendant le build **et** dans le conteneur |
-| `ARG` | Définir une variable disponible **uniquement pendant le build**, modifiable avec `--build-arg` |
-| `EXPOSE` | Documenter le port d'écoute |
-| `CMD` | Commande par défaut du conteneur, remplaçable au `docker run` |
-| `ENTRYPOINT` | Programme principal du conteneur, auquel `CMD` est passé en arguments |
-| `USER` | Utilisateur des instructions suivantes et du conteneur |
-| `LABEL` | Métadonnées libres (auteur, version, source...) |
-| `VOLUME` | Déclarer un dossier dont les données doivent vivre hors du conteneur |
 
 **Ce que vous devez faire :**
 
