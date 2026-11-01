@@ -304,10 +304,8 @@ Comparez ensuite les tailles et les historiques de V1 et V2.
 
 **Questions de réflexion :**
 
-- Quelle différence entre `npm install` et `npm ci` ?
+- Comparez ensuite les tailles et les historiques de V1 et V2.
 - Pourquoi `COPY --chown=node:node` plutôt que `COPY` suivi de `RUN chown -R node:node /app` ?
-- Un `ARG` déclaré avant `FROM` est-il utilisable dans les instructions qui suivent `FROM` ?
-- Que reste-t-il dans l'image qui ne sert pas à l'exécution ?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
@@ -316,8 +314,7 @@ Comparez ensuite les tailles et les historiques de V1 et V2.
 `front/Dockerfile`, V2 :
 
 ```dockerfile
-ARG NODE_VERSION=22
-FROM node:${NODE_VERSION}-alpine
+FROM node:22-alpine
 
 RUN npm install -g serve && npm cache clean --force
 
@@ -325,10 +322,8 @@ WORKDIR /app
 RUN chown node:node /app
 USER node
 
-COPY --chown=node:node package.json package-lock.json ./
-RUN npm ci && npm cache clean --force
-
 COPY --chown=node:node . .
+RUN npm ci && npm cache clean --force
 RUN npx ng build && rm -rf .angular
 
 ENV BACKEND_URL=http://localhost:8080
@@ -338,17 +333,9 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 ```bash
 docker build -t tp3-front:v2 front/
-docker images tp3-front
-docker history tp3-front:v2
+docker image ls tp3-front
+docker image history tp3-front:v2
 ```
-
-`serve` est installé globalement **avant** `USER node`, car l'installation globale écrit dans `/usr/local`, réservé à root.
-
-`npm install` résout les versions à partir des plages de `package.json` et peut mettre à jour `package-lock.json` : deux builds à une semaine d'intervalle peuvent produire des `node_modules` différents. `npm ci` installe **exactement** les versions de `package-lock.json`, échoue si les deux fichiers sont incohérents et repart d'un `node_modules` vide. C'est la commande des builds reproductibles.
-
-`RUN chown -R` modifie les métadonnées de chaque fichier : il les **recopie tous** dans une nouvelle couche, ce qui peut doubler la taille d'un `node_modules`. `COPY --chown` attribue le propriétaire au moment de la copie, sans couche supplémentaire.
-
-Un `ARG` déclaré avant `FROM` n'est visible que dans les lignes `FROM`. Pour l'utiliser plus loin, il faut le redéclarer (sans valeur) après `FROM` : `ARG NODE_VERSION`.
 
 Le passage à `alpine` et le nettoyage des caches réduisent nettement la taille. Mais `node_modules` (tout l'outillage de compilation Angular), Node.js lui-même et les sources restent dans l'image, alors que l'exécution n'a besoin que du dossier `dist/browser` et d'un serveur web. Supprimer `node_modules` dans une couche suivante ne servirait à rien (étape 6), et le supprimer dans la couche de `npm ci` casserait le build. Là encore, le build multi-étapes est la solution.
 
@@ -357,140 +344,3 @@ Le passage à `alpine` et le nettoyage des caches réduisent nettement la taille
 {:/nomarkdown}
 
 ---
-
-## Étape 8 - Options de build, tags et versions
-
-Un nom d'image complet a la forme `registre/espace/nom:tag`, par exemple `ghcr.io/mon-equipe/tp3-back:1.0.0`. Sans registre, Docker Hub est utilisé ; sans tag, `latest`.
-
-Le **versionnage sémantique** (`MAJEUR.MINEUR.CORRECTIF`) indique la nature des changements : `1.0.1` corrige un bug, `1.1.0` ajoute une fonctionnalité compatible, `2.0.0` casse la compatibilité.
-
-**Ce que vous devez faire :**
-
-- Construisez le back V2 en version `1.0.0`, en injectant cette version dans le `LABEL` avec `--build-arg`. Vérifiez le label avec `docker image inspect`.
-- Ajoutez à la même image les tags `1.0`, `1` et `latest`. Listez les images : combien d'images distinctes avez-vous réellement ?
-- Reconstruisez **sans utiliser le cache**, et comparez le temps de build avec un build avec cache.
-- Construisez une version `1.0.1` après une petite modification du code. Vers quelle image pointent maintenant `1.0`, `1` et `latest` ? Que faut-il faire pour les mettre à jour ?
-
-**Questions de réflexion :**
-
-- Quel tag utiliser dans un fichier de déploiement de production ? Pourquoi pas `latest` ?
-- Pourquoi ne faut-il jamais republier une image différente sous un tag déjà publié comme `1.0.0` ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 8</summary>
-{:/nomarkdown}
-
-```bash
-docker build --build-arg APP_VERSION=1.0.0 -t tp3-back:1.0.0 back/
-docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' tp3-back:1.0.0
-
-docker tag tp3-back:1.0.0 tp3-back:1.0
-docker tag tp3-back:1.0.0 tp3-back:1
-docker tag tp3-back:1.0.0 tp3-back:latest
-docker images tp3-back
-```
-
-Les quatre tags affichent le même `IMAGE ID` : un tag n'est qu'une étiquette qui pointe vers une image, et il n'y a qu'une image. On peut aussi poser plusieurs tags dès le build : `docker build -t tp3-back:1.0.0 -t tp3-back:1.0 ...`.
-
-```bash
-time docker build --no-cache --build-arg APP_VERSION=1.0.0 -t tp3-back:1.0.0 back/
-```
-
-`--no-cache` reconstruit toutes les étapes. On l'utilise pour forcer la récupération des dernières mises à jour de paquets (correctifs de sécurité) ou pour écarter un problème de cache. `--pull` force en plus le téléchargement de la dernière version de l'image de base.
-
-Après le build de `1.0.1`, les tags `1.0`, `1` et `latest` pointent toujours vers `1.0.0` : un tag ne bouge jamais tout seul. Il faut les déplacer explicitement avec `docker tag tp3-back:1.0.1 tp3-back:1.0`, et ainsi de suite. C'est le travail du pipeline de CI à chaque publication.
-
-En production, on déploie une version **immuable** (`1.0.1`), ou mieux, un digest. `latest` ne dit pas quelle version tourne, change sans prévenir au prochain `pull`, et rend un retour arrière impossible à garantir. Republier un tag déjà publié produit le même problème : deux serveurs qui ont téléchargé `1.0.0` à des moments différents exécutent des codes différents. Les registres d'entreprise interdisent souvent cette pratique (tags immuables).
-
-> **Pour aller plus loin : `--target`.** Un Dockerfile peut contenir plusieurs `FROM`, chacun ouvrant une **étape** que l'on peut nommer (`FROM maven:3-eclipse-temurin-17 AS build`). `docker build --target build` s'arrête à l'étape indiquée. Cette option n'a de sens qu'avec un Dockerfile multi-étapes : ce sera l'objet du TP suivant.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 9 - Tout lancer et faire le bilan
-
-**Ce que vous devez faire :**
-
-- Supprimez les conteneurs `back` et `front` existants.
-- Lancez le back V2 avec un volume nommé `back-data` pour la base SQLite, puis le front V2 sur le port 4200.
-- Dans l'application, créez quelques données. Supprimez le conteneur du back, relancez-le avec le même volume, et vérifiez que les données sont toujours là.
-- Remplissez le tableau suivant avec `docker images` :
-
-| Image | Taille |
-| --- | --- |
-| `tp3-back:v1` (Ubuntu + apt, naïve) | |
-| `tp3-back:v2` (Ubuntu + apt, optimisée) | |
-| back V2 sur `maven:3-eclipse-temurin-17` | |
-| `eclipse-temurin:17-jre` seule (pour comparaison) | |
-| `tp3-front:v1` (`node:22`, naïve) | |
-| `tp3-front:v2` (`node:22-alpine`, optimisée) | |
-
-- Faites le ménage : conteneurs, volume et images de ce TP.
-
-**Question de réflexion :**
-
-- Pour chaque image V2, estimez la part de la taille réellement nécessaire à l'exécution. Qu'est-ce qui vous empêche de supprimer le reste ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 9</summary>
-{:/nomarkdown}
-
-```bash
-docker rm -f back front
-
-docker run -d --name back -p 8080:8080 -v back-data:/data tp3-back:v2
-docker run -d --name front -p 4200:4200 tp3-front:v2
-```
-
-`BACKEND_URL` a désormais une valeur par défaut dans l'image (`http://localhost:8080`) : inutile de la préciser.
-
-```bash
-docker rm -f back
-docker run -d --name back -p 8080:8080 -v back-data:/data tp3-back:v2
-```
-
-Les données créées sont toujours présentes : la base SQLite vit dans le volume, pas dans le conteneur.
-
-Ménage :
-
-```bash
-docker rm -f back front
-docker volume rm back-data
-docker rmi tp3-back:v1 tp3-back:v2 tp3-back:1.0.0 tp3-back:1.0.1 tp3-back:1.0 tp3-back:1 tp3-back:latest tp3-front:v1 tp3-front:v2
-docker image prune
-docker system df
-```
-
-Adaptez la liste des tags à ceux que vous avez réellement créés. Les images de base (`ubuntu`, `node`, `eclipse-temurin`...) peuvent être conservées pour le TP suivant.
-
-Pour le back, seuls le jar (quelques dizaines de Mo) et un JRE sont nécessaires : le JDK, Maven, le dépôt `~/.m2` et les sources représentent la majorité de l'image. Pour le front, seul `dist/browser` (quelques Mo) et un serveur web sont nécessaires : Node.js, `node_modules` et les sources sont superflus. Avec une seule étape, tout ce qui sert à construire reste dans l'image qui s'exécute. Le TP suivant sépare les deux.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Récapitulatif des bonnes pratiques
-
-| Pratique | Pourquoi |
-| --- | --- |
-| Ordonner les instructions du plus stable au plus changeant | Maximiser la réutilisation du cache |
-| Copier les fichiers de dépendances avant le code | Ne pas retélécharger les dépendances à chaque modification du code |
-| `apt-get update && apt-get install --no-install-recommends ... && rm -rf /var/lib/apt/lists/*` dans un seul `RUN` | Index à jour, pas de paquets superflus, pas d'index dans l'image |
-| `apk add --no-cache`, `npm ci && npm cache clean --force` | Pas de cache de gestionnaire de paquets dans l'image |
-| Nettoyer dans la même instruction que celle qui crée les fichiers | Une suppression dans une couche suivante ne réduit pas la taille |
-| `.dockerignore` | Contexte léger, pas de fichiers locaux ni de données dans l'image |
-| `COPY` plutôt que `ADD` | Pas d'extraction ni de téléchargement implicites |
-| `COPY --chown` plutôt que `RUN chown -R` | Pas de duplication des fichiers dans une nouvelle couche |
-| `ARG` pour le build, `ENV` pour l'exécution | Ne pas polluer l'environnement du conteneur |
-| Aucun secret dans `ARG`, `ENV`, `COPY` ou dans le code | Tout ce qui est dans l'image est lisible par qui peut la télécharger |
-| Forme *exec* pour `CMD` et `ENTRYPOINT`, `exec` dans les scripts | L'application reçoit les signaux d'arrêt |
-| `USER` non root | Limiter l'impact d'une compromission |
-| `LABEL` OCI | Traçabilité : version, source, description |
-| Tags immuables et versionnage sémantique | Savoir ce qui tourne, pouvoir revenir en arrière |
-
-{% endraw %}
