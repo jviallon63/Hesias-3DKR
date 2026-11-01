@@ -9,4 +9,6 @@ Gemfile.lock
 vendor/
 .bundle/
 
-**/app.db
+**/*.db
+**/back/**/*.*
+**/front/**/*.*

@@ -1,0 +1,22 @@
+FROM ubuntu:24.04
+
+RUN apt-get update \
+ && apt-get install -y openjdk-17-jdk-headless maven \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system app && adduser --system --ingroup app app
+
+WORKDIR /app
+
+COPY pom.xml .
+COPY src ./src
+RUN mvn package -DskipTests \
+ && cp target/openapi-workshop-*.jar /app/app.jar \
+ && rm -rf target
+
+RUN mkdir /data && chown app:app /data
+
+USER app:app
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+CMD ["--server.port=8080"]

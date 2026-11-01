@@ -23,8 +23,8 @@ Clonez le dépôt de l'application de test [sample-app](https://github.com/jvial
 ```mermaid
 flowchart LR
       User[Utilisateur / navigateur] -->|HTTP :4200| Front[Front-end Angular]
-      Front -->|Appels API depuis le navigateur :8081/api| Back[Back-end Spring Boot]
-      Back -->|/data/app.db| Database[(Base SQLite)]
+      Front -->|Appels API depuis le navigateur :8080/api| Back[Back-end Spring Boot]
+      Back -->|/data/local.db| Database[(Base SQLite)]
 ```
 
 ---
@@ -52,7 +52,7 @@ apt-get install -y openjdk-17-jdk-headless maven
 
 ## Compilation
 mkdir -p /app
-cp -r <dossier back du dépôt>/. /app/
+cp -r . /app/
 cd /app
 mvn package -DskipTests
 
@@ -61,13 +61,13 @@ mkdir -p /data
 java -jar target/openapi-workshop-1.0.0.jar
 ```
 
-L'application écoute sur le port `8081`, sous le chemin `/api`, et stocke sa base SQLite dans `/data/app.db`.
+L'application écoute sur le port `8080`, sous le chemin `/api`, et stocke sa base SQLite dans `/data/app.db`.
 
 **Ce que vous devez faire :**
 
 - Écrivez `back/Dockerfile` en traduisant la procédure **le plus directement possible**, une commande par instruction. L'image de base est `ubuntu:24.04`
 - Construisez l'image avec le nom `tp3-back:v1` en utilisant `back/` comme contexte de build.
-- Lancez un conteneur `back` en publiant le port 8081 et en utilisant un volume pour la base de données, puis testez avec <http://localhost:8081/api/swagger-ui.html>.
+- Lancez un conteneur `back` en publiant le port 8080 et en utilisant un volume pour la base de données, puis testez avec <http://localhost:8080/api/swagger-ui.html>.
 
 **Questions de réflexion :**
 
@@ -95,7 +95,7 @@ CMD ["java", "-jar", "target/openapi-workshop-1.0.0.jar"]
 
 ```bash
 docker build -t tp3-back:v1 back/
-docker container run -d --name back -p 8081:8081 -v ./tp3/data/:/data/ tp3-back:v1
+docker container run -d --name back -p 8080:8080 -v ./data/:/data/ tp3-back:v1
 docker container logs -f back                 # attendre « Started OpenapiWorkshopApplication »
 docker image ls tp3-back
 docker image history tp3-back:v1
@@ -120,24 +120,11 @@ npm install -g @angular/cli
 ng build
 npm install -g serve
 
-export BACKEND_URL=http://localhost:8081
+export BACKEND_URL=http://localhost:8080
 ./docker-entrypoint.sh
 ```
 
 Le script `docker-entrypoint.sh` écrit l'URL du back dans `/app/dist/browser/assets/config.js`, que le navigateur charge au démarrage de l'application, puis lance le serveur web `serve` sur le port 4200 avec `exec`.
-
-`front/docker-entrypoint.sh` :
-
-```sh
-#!/bin/sh
-set -eu
-cat > /app/dist/browser/assets/config.js <<EOF
-window.dynamicConf = {
-  BACKEND_URL: "${BACKEND_URL}"
-};
-EOF
-exec serve -l 4200 /app/dist/browser
-```
 
 **Ce que vous devez faire :**
 
@@ -146,7 +133,6 @@ exec serve -l 4200 /app/dist/browser
 
 **Questions de réflexion :**
 
-- Quelle est la différence entre `CMD` et `ENTRYPOINT` ? Que se passe-t-il quand on combine les deux ?
 - Relevez la taille de l'image et affichez son historique. Identifiez les axes d'optimisation.
 
 {::nomarkdown}
@@ -164,6 +150,7 @@ RUN npm install
 RUN npm install -g @angular/cli
 RUN ng build
 RUN npm install -g serve
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 4200
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
@@ -171,176 +158,18 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 ```bash
 docker build -t tp3-front:v1 front/
-docker container run -d --name front -p 4200:4200 -e BACKEND_URL=http://localhost:8081 tp3-front:v1
+docker container run -d --name front -p 4200:4200 -e BACKEND_URL=http://localhost:8080 tp3-front:v1
 docker image ls tp3-front
 docker image history tp3-front:v1
 ```
 
-Combinaison de `ENTRYPOINT` et `CMD` :
-
-| `ENTRYPOINT` | `CMD` | Commande exécutée | `docker run image xyz` exécute |
-| --- | --- | --- | --- |
-| absent | `["serve", "-l", "4200"]` | `serve -l 4200` | `xyz` |
-| `["/app/docker-entrypoint.sh"]` | absent | `/app/docker-entrypoint.sh` | `/app/docker-entrypoint.sh xyz` |
-| `["java", "-jar", "app.jar"]` | `["--server.port=8081"]` | `java -jar app.jar --server.port=8081` | `java -jar app.jar xyz` |
-
-`CMD` est une valeur par défaut que les arguments de `docker run` remplacent. `ENTRYPOINT` est le programme à lancer quoi qu'il arrive ; `CMD` lui fournit alors des arguments par défaut. Avec `docker container run -it --rm tp3-front:v1 sh`, `sh` est passé en argument au script, qui l'ignore et lance `serve` quand même. Pour remplacer le point d'entrée, il faut `--entrypoint` :
-
-```bash
-docker container run -it --rm --entrypoint sh tp3-front:v1
-```
-
 {::nomarkdown}
 </details>
 {:/nomarkdown}
 
 ---
 
-## Étape 3 - L'ordre des instructions et le cache de build
-
-À chaque instruction, le builder vérifie s'il possède déjà une couche produite par **la même instruction, sur la même couche parente**. Pour `COPY` et `ADD`, il compare aussi le contenu des fichiers copiés. Si tout correspond, il réutilise la couche (`CACHED`). Dès qu'une instruction est invalidée, **toutes les suivantes** sont reconstruites.
-
-**Ce que vous devez faire :**
-
-- Reconstruisez `tp3-back:v1` sans rien modifier, avec `--progress=plain`. Notez le temps et les lignes `CACHED`.
-- Modifiez un fichier Java du back (un commentaire suffit), puis reconstruisez. Quelles étapes sont rejouées ? Que télécharge Maven ?
-- Proposez un ordre d'instructions qui évite de retélécharger toutes les dépendances Maven à chaque modification du code. Indice : `mvn dependency:go-offline` télécharge les dépendances déclarées dans `pom.xml` sans compiler.
-- Appliquez le même raisonnement au front.
-
-**Questions de réflexion :**
-
-- Pourquoi `apt-get update` dans une instruction et `apt-get install` dans la suivante pose-t-il un problème de cache, indépendamment de la taille ?
-- Quelles parties d'un projet changent souvent, lesquelles rarement ? Comment en déduire l'ordre des instructions ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 3</summary>
-{:/nomarkdown}
-
-```bash
-time docker build --progress=plain -t tp3-back:v1 back/
-```
-
-Sans modification, toutes les étapes sont `CACHED` et le build dure quelques secondes.
-
-Après modification d'un fichier Java, le contenu du contexte change : le `COPY . .` est invalidé, ainsi que tout ce qui suit. `mvn package` repart d'un dépôt Maven vide et retélécharge **toutes** les dépendances, alors que `pom.xml` n'a pas changé.
-
-En copiant d'abord `pom.xml` seul, les dépendances sont téléchargées dans une couche qui ne dépend que de lui :
-
-```dockerfile
-WORKDIR /app
-COPY pom.xml .
-RUN mvn dependency:go-offline
-COPY src ./src
-RUN mvn package -DskipTests
-```
-
-Une modification du code n'invalide plus que les deux dernières instructions. `go-offline` ne récupère pas absolument tout (certains plugins ne sont résolus qu'au moment de `package`), mais l'essentiel est en cache.
-
-Pour le front, même principe avec `package.json` et `package-lock.json` :
-
-```dockerfile
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npx ng build
-```
-
-Avec `apt-get update` seul dans une couche en cache, un `apt-get install` ajouté plus tard réutiliserait des index de paquets vieux de plusieurs semaines : versions obsolètes, voire paquets introuvables. En les regroupant dans le même `RUN`, toute modification de la liste des paquets relance aussi la mise à jour des index.
-
-Règle générale : du plus stable au plus changeant. Image de base, puis paquets système, puis dépendances de l'application, puis code source, puis métadonnées.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 4 - `.dockerignore` et secrets
-
-### Le contexte de build
-
-**Ce que vous devez faire :**
-
-- Si ce n'est pas déjà fait, lancez `npm install` dans `front/` via un conteneur jetable, pour simuler un développeur qui travaille sur son poste :
-
-  ```bash
-  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/front":/app -w /app node:22 npm install
-  ```
-
-  `--user` évite que, sous Linux, les fichiers créés appartiennent à root sur votre poste.
-
-- Reconstruisez `tp3-front:v1` avec `--progress=plain` et relevez la taille du contexte transféré (`transferring context`).
-- Créez un fichier `front/.dockerignore` et un fichier `back/.dockerignore` qui excluent ce qui n'a rien à faire dans l'image. Reconstruisez et comparez.
-
-### Les secrets
-
-Imaginons que le back ait besoin d'un mot de passe pendant le build, pour accéder à un dépôt Maven privé.
-
-- Ajoutez temporairement au `Dockerfile` du back une instruction `ARG REPO_PASSWORD` suivie d'un `RUN echo "connexion au dépôt..."` qui l'utilise, puis construisez avec `--build-arg REPO_PASSWORD=Sup3rS3cret`.
-- Cherchez le mot de passe dans `docker history --no-trunc`.
-- Remplacez `ARG` par `ENV REPO_PASSWORD=Sup3rS3cret`, reconstruisez, et cherchez le mot de passe avec `docker image inspect`.
-- Ouvrez `back/src/main/java/com/workshop/openapi/config/SecurityConfig.java` et cherchez un autre secret.
-
-**Questions de réflexion :**
-
-- Pourquoi exclure `node_modules` et `target` du contexte, alors qu'ils seront de toute façon recréés dans l'image ?
-- Un fichier copié par une instruction puis supprimé par une instruction suivante est-il encore lisible dans l'image ?
-- Comment fournir correctement un secret au build ? Et à l'exécution ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 4</summary>
-{:/nomarkdown}
-
-Avec `node_modules` présent, le contexte du front passe de quelques Mo à plusieurs centaines. Le transfert ralentit chaque build, et `COPY . .` place dans l'image un `node_modules` construit **pour votre poste**, qui peut contenir des binaires compilés pour la mauvaise plateforme (macOS au lieu de Linux, par exemple).
-
-`front/.dockerignore` :
-
-```text
-node_modules
-dist
-.angular
-.git
-Dockerfile
-.dockerignore
-*.md
-```
-
-`back/.dockerignore` :
-
-```text
-target
-*.db
-.git
-.idea
-Dockerfile
-.dockerignore
-*.md
-```
-
-Exclure `*.db` évite d'embarquer dans l'image une base SQLite locale, qui peut contenir des données personnelles.
-
-Secrets : avec `ARG`, la valeur apparaît dans `docker history --no-trunc`, sur la ligne de chaque `RUN` qui suit sa déclaration (`|1 REPO_PASSWORD=Sup3rS3cret /bin/sh -c echo ...`). Avec `ENV`, elle est écrite dans la configuration de l'image :
-
-```bash
-docker image inspect -f '{{json .Config.Env}}' tp3-back:v1
-```
-
-Quiconque peut télécharger l'image peut lire ces secrets. De même, un fichier ajouté dans une couche puis supprimé dans une couche suivante reste présent dans la première : il suffit d'extraire l'archive, comme à l'étape 1. Retirez ces instructions de test avant de continuer.
-
-`SecurityConfig.java` contient le mot de passe `admin123` de l'utilisateur administrateur, écrit en dur. Il se retrouve dans le dépôt Git, dans l'image et dans tous ses environnements. Il devrait être lu depuis une variable d'environnement ou un fichier fourni au lancement.
-
-Les bonnes pratiques :
-
-- **au build** : `RUN --mount=type=secret,id=repo_password ...` avec `docker build --secret id=repo_password,src=<fichier>`. Le secret est monté le temps d'une seule instruction et n'est écrit dans aucune couche ;
-- **à l'exécution** : variable d'environnement (`docker run -e`) ou fichier monté en lecture seule, fournis par l'orchestrateur, jamais dans l'image.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 5 - Choisir son image de base
+## Étape 3 - Choisir son image de base
 
 | Famille | Exemples | Taille | Débogage | Compatibilité |
 | --- | --- | --- | --- | --- |
@@ -351,67 +180,23 @@ Les bonnes pratiques :
 
 **Ce que vous devez faire :**
 
-- Téléchargez les images suivantes et comparez leurs tailles : `eclipse-temurin:17-jdk`, `eclipse-temurin:17-jre`, `eclipse-temurin:17-jre-alpine`, `gcr.io/distroless/java17-debian12`.
-- Lancez un shell dans `eclipse-temurin:17-jre`, puis dans l'image distroless. Que se passe-t-il ?
-- Affichez la liste des outils présents dans le JDK et dans le JRE (`ls /opt/java/openjdk/bin`). Lequel contient `javac` ?
-- Réécrivez le back V2 en partant de l'image officielle `maven:3-eclipse-temurin-17` au lieu d'installer Java et Maven avec `apt`. Comparez la taille et la lisibilité du Dockerfile.
-
-**Questions de réflexion :**
-
-- Peut-on construire le back V2 à partir de `eclipse-temurin:17-jre` ? Et à partir de l'image distroless ?
-- Quelle image choisiriez-vous pour la production ? Pour déboguer un problème en recette ?
-
-> Sur un Mac Apple Silicon ou une machine ARM, si un `docker pull` échoue avec `no matching manifest`, l'image n'existe pas pour votre architecture. Vérifiez-le avec `docker buildx imagetools inspect`, comme à l'étape 1.
+- Téléchargez les images suivantes et comparez leurs tailles : `eclipse-temurin:21-jdk`, `eclipse-temurin:21-jdk-alpine`, `eclipse-temurin:21-ubi10-minimal`, `eclipse-temurin:21-jre-alpine`, `gcr.io/distroless/java21-debian12`.
+- Affichez la liste des outils présents dans le JDK et dans le JRE alpine (`ls /opt/java/openjdk/bin`). Lequel contient `javac` ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
+<details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
 
 ```bash
-docker pull eclipse-temurin:17-jdk
-docker pull eclipse-temurin:17-jre
-docker pull eclipse-temurin:17-jre-alpine
-docker pull gcr.io/distroless/java17-debian12
+docker image pull eclipse-temurin:21-jdk
+docker image pull eclipse-temurin:21-jdk-alpine
+docker image pull eclipse-temurin:21-ubi10-minimal
+docker image pull eclipse-temurin:21-jre-alpine
+docker image pull gcr.io/distroless/java21-debian12
 docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'temurin|distroless'
 ```
 
 Le JRE est sensiblement plus petit que le JDK, et la variante alpine encore plus. Le JDK contient le compilateur `javac`, les outils de diagnostic (`jcmd`, `jmap`...) et `jlink` ; le JRE ne contient que de quoi **exécuter** du bytecode (`java`).
-
-```bash
-docker run --rm -it eclipse-temurin:17-jre sh          # fonctionne
-docker run --rm -it gcr.io/distroless/java17-debian12 sh
-```
-
-L'image distroless a pour point d'entrée `java -jar` : `sh` est interprété comme le nom d'un jar, et Java échoue. Avec `--entrypoint sh`, Docker indique que l'exécutable est introuvable. Pas de shell, donc pas de `docker exec ... sh` pour déboguer, mais aussi beaucoup moins d'outils exploitables par un attaquant et moins de vulnérabilités signalées par les scanners.
-
-Back V2 sur l'image Maven officielle :
-
-```dockerfile
-FROM maven:3-eclipse-temurin-17
-
-ARG APP_VERSION=dev
-LABEL org.opencontainers.image.title="tp3-back" \
-      org.opencontainers.image.version="${APP_VERSION}"
-
-WORKDIR /app
-COPY pom.xml .
-RUN mvn -B dependency:go-offline
-COPY src ./src
-RUN mvn -B package -DskipTests \
- && cp target/openapi-workshop-*.jar /app/app.jar \
- && rm -rf target
-
-RUN mkdir /data && chown ubuntu:ubuntu /data
-VOLUME /data
-ENV DB_PATH=/data/app.db
-
-USER ubuntu
-EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-CMD ["--server.port=8081"]
-```
-
-Plus besoin d'`apt` : Java et Maven sont fournis, maintenus et mis à jour par leurs éditeurs. Vérifiez que l'utilisateur `ubuntu` existe dans cette image (`docker run --rm maven:3-eclipse-temurin-17 id ubuntu`) ; sinon, créez un utilisateur dédié avec `useradd`.
 
 On ne peut pas compiler à partir du JRE (pas de `javac`), ni à partir de distroless (pas de shell pour exécuter `RUN`, pas de Maven). Avec un Dockerfile à une étape, l'image qui compile est aussi celle qui s'exécute : on est condamné au JDK. Le build multi-étapes permet de compiler dans une image JDK, puis de ne copier que le jar dans une image JRE ou distroless.
 
@@ -423,37 +208,31 @@ En production, on privilégie une image minimale : distroless ou JRE alpine, si 
 
 ---
 
-## Étape 6 - Le back, V2 : optimiser les commandes et les couches
+## Étape 4 - Le back, V2 : optimiser les commandes et les couches
 
 **Ce que vous devez faire :**
 
 Repartez de votre V1 et appliquez les règles suivantes, puis construisez `tp3-back:v2` :
 
-- regroupez `apt-get update` et `apt-get install` dans un seul `RUN`, sans les paquets recommandés (`--no-install-recommends`), et supprimez les index de paquets (`/var/lib/apt/lists/*`) **dans la même instruction** ;
-- utilisez `ARG` pour ce qui ne concerne que le build ;
-- ordonnez les instructions pour le cache (étape 4) ;
-- dans l'instruction qui compile, copiez le jar vers `/app/app.jar` et supprimez `target/` ;
-- préparez `/data`, déclarez-le comme `VOLUME`, et définissez son chemin avec `ENV DB_PATH=/data/app.db` ;
-- faites tourner l'application avec l'utilisateur non root `ubuntu`, déjà présent dans l'image de base ;
-- documentez le port avec `EXPOSE` ;
-- lancez Java avec `ENTRYPOINT`, et passez le port par défaut avec `CMD` ;
-- ajoutez des `LABEL` au format standard OCI (`org.opencontainers.image.*`), dont la version, fournie par un `ARG APP_VERSION`.
-
-Ensuite :
-
-- Comparez les tailles de V1 et V2, et leurs `docker history`.
-- **Expérience :** déplacez le `rm -rf /var/lib/apt/lists/*` dans un `RUN` séparé, reconstruisez, et comparez la taille.
-- Lancez la V2 sur le port 9090 **sans modifier l'image**, en profitant de la combinaison `ENTRYPOINT` + `CMD`.
-- Vérifiez avec quel utilisateur tourne l'application.
+- Conservez l'image de base `ubuntu:24.04` pour avoir une bonne base de comparaison.
+- regroupez les `RUN` et nettoyer `apt-get update` et `apt-get install`.
+- ordonnez les instructions pour le cache.
+- dans l'instruction qui compile, copiez le jar `target/openapi-workshop-*.jar` vers `/app/app.jar` et supprimez `target/`.
+- créer un répertoire vide `/data`.
+- créez un groupe système `app` et l'utilisateur système `app` dans ce groupe, puis faites tourner l'application avec lui.
+- documentez le port avec `EXPOSE`.
+- lancez Java avec `ENTRYPOINT`, et passez le port par défaut avec `CMD`. Hors docker la commande est `java -jar /app/app.jar --server.port=8080"`
 
 **Questions de réflexion :**
 
-- Pourquoi supprimer des fichiers dans un `RUN` séparé ne réduit-il pas la taille de l'image ?
-- Le dépôt Maven `/root/.m2` est toujours dans l'image V2. Peut-on le supprimer sans perdre l'avantage du cache de l'étape 4 ?
+- Comparez les tailles de V1 et V2, et leurs `docker image history`.
+- **Expérience :** déplacez le `rm -rf /var/lib/apt/lists/*` dans un `RUN` séparé, reconstruisez, et comparez la taille.
+- Pourquoi conserver `apy-get update` et `apt-get install` ?
 - Pourquoi faire tourner l'application avec un utilisateur non root ?
+- Lancez la V2 sur le port 9090 **sans modifier l'image**, en profitant de la combinaison `ENTRYPOINT` + `CMD`.
 
 {::nomarkdown}
-<details><summary>Solution - Étape 6</summary>
+<details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
 
 `back/Dockerfile`, V2 :
@@ -461,41 +240,32 @@ Ensuite :
 ```dockerfile
 FROM ubuntu:24.04
 
-ARG DEBIAN_FRONTEND=noninteractive
-ARG APP_VERSION=dev
-
-LABEL org.opencontainers.image.title="tp3-back" \
-      org.opencontainers.image.description="API Spring Boot du TP 3" \
-      org.opencontainers.image.version="${APP_VERSION}"
-
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openjdk-17-jdk-headless maven \
+ && apt-get install -y openjdk-17-jdk-headless maven \
  && rm -rf /var/lib/apt/lists/*
+
+RUN addgroup --system app && adduser --system --ingroup app app
 
 WORKDIR /app
 
 COPY pom.xml .
-RUN mvn -B dependency:go-offline
-
 COPY src ./src
-RUN mvn -B package -DskipTests \
+RUN mvn package -DskipTests \
  && cp target/openapi-workshop-*.jar /app/app.jar \
  && rm -rf target
 
-RUN mkdir /data && chown ubuntu:ubuntu /data
-VOLUME /data
-ENV DB_PATH=/data/app.db
+RUN mkdir /data && chown app:app /data
 
-USER ubuntu
-EXPOSE 8081
+USER app:app
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-CMD ["--server.port=8081"]
+CMD ["--server.port=8080"]
 ```
 
 ```bash
 docker build -t tp3-back:v2 back/
-docker images tp3-back
-docker history tp3-back:v2
+docker image ls tp3-back
+docker image history tp3-back:v2
 ```
 
 Une couche ne contient que les **différences** par rapport à la précédente. Un `RUN rm` séparé ajoute une couche qui marque les fichiers comme supprimés (des fichiers spéciaux appelés *whiteouts*), mais la couche précédente, qui les contient, est toujours téléchargée et stockée. Le nettoyage doit avoir lieu dans l'instruction qui crée les fichiers. C'est la raison d'être des longues chaînes de commandes reliées par `&&`.
@@ -506,18 +276,10 @@ Lancement sur un autre port :
 
 ```bash
 docker rm -f back
-docker run -d --name back -p 9090:9090 tp3-back:v2 --server.port=9090
-curl -sL -o /dev/null -w '%{http_code}\n' http://localhost:9090/api/swagger-ui.html    # 200
-docker exec back id                 # uid=1000(ubuntu)
+docker run -d --name back -p 8080:8080 tp3-back:v2 --server.port=9090
 ```
 
 L'argument `--server.port=9090` remplace le `CMD` et est ajouté après l'`ENTRYPOINT`.
-
-Le `chown` de `/data` doit être fait **avant** `VOLUME` : les modifications apportées à un dossier après sa déclaration en volume peuvent être ignorées. Comme vu au TP 2, un volume nommé vide reprend le contenu et les permissions de ce dossier au premier lancement, et l'utilisateur `ubuntu` peut y écrire.
-
-`/root/.m2` pèse lourd, mais il est créé par la couche `dependency:go-offline`, que l'on veut justement garder en cache. Le supprimer dans la couche suivante ne réduirait pas la taille, et le supprimer dans la même couche ferait perdre le cache. Avec une seule étape, il faut choisir entre build rapide et image légère. Le JDK et Maven, nécessaires à la compilation et inutiles à l'exécution, posent le même problème : c'est exactement ce que résolvent les builds multi-étapes du TP suivant.
-
-Un processus root dans un conteneur est root sur le noyau partagé avec l'hôte. En cas de faille dans l'application ou dans le runtime, l'attaquant dispose d'emblée des privilèges maximum. Avec un utilisateur sans privilèges, il est bien plus limité. De nombreuses plateformes (Kubernetes avec des politiques de sécurité, OpenShift) refusent d'ailleurs les conteneurs root.
 
 {::nomarkdown}
 </details>
@@ -525,19 +287,18 @@ Un processus root dans un conteneur est root sur le noyau partagé avec l'hôte.
 
 ---
 
-## Étape 7 - Le front, V2
+## Étape 5 - Le front, V2
 
 **Ce que vous devez faire :**
 
 Repartez de votre V1 du front et construisez `tp3-front:v2` en appliquant :
 
-- une image de base `node:22-alpine`, dont la version de Node est fournie par un `ARG NODE_VERSION` placé **avant** `FROM` ;
-- `npm ci` au lieu de `npm install`, et `npx ng build` au lieu d'une installation globale d'Angular CLI ;
-- le nettoyage du cache npm et du cache de build Angular (dossier `.angular`) dans les instructions qui les créent ;
-- l'ordre des instructions de l'étape 4 ;
-- l'utilisateur non root `node`, déjà présent dans l'image, avec `COPY --chown` pour lui donner les fichiers ;
-- une valeur par défaut pour `BACKEND_URL` ;
-- des `LABEL` OCI, comme pour le back.
+- une image de base `node:22-alpine`.
+- `npm ci` au lieu de `npm install`, et `npx ng build` au lieu d'une installation globale d'Angular CLI.
+- le nettoyage du cache npm et du cache de build Angular (dossier `.angular`) dans les instructions qui les créent.
+- l'ordre des instructions.
+- l'utilisateur non root `node`, déjà présent dans l'image, avec `COPY --chown` pour lui donner les fichiers.
+- une valeur par défaut pour `BACKEND_URL`.
 
 Comparez ensuite les tailles et les historiques de V1 et V2.
 
@@ -549,7 +310,7 @@ Comparez ensuite les tailles et les historiques de V1 et V2.
 - Que reste-t-il dans l'image qui ne sert pas à l'exécution ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 7</summary>
+<details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
 
 `front/Dockerfile`, V2 :
@@ -557,11 +318,6 @@ Comparez ensuite les tailles et les historiques de V1 et V2.
 ```dockerfile
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine
-
-ARG APP_VERSION=dev
-LABEL org.opencontainers.image.title="tp3-front" \
-      org.opencontainers.image.description="Front Angular du TP 3" \
-      org.opencontainers.image.version="${APP_VERSION}"
 
 RUN npm install -g serve && npm cache clean --force
 
@@ -575,7 +331,7 @@ RUN npm ci && npm cache clean --force
 COPY --chown=node:node . .
 RUN npx ng build && rm -rf .angular
 
-ENV BACKEND_URL=http://localhost:8081
+ENV BACKEND_URL=http://localhost:8080
 EXPOSE 4200
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 ```
@@ -685,15 +441,15 @@ En production, on déploie une version **immuable** (`1.0.1`), ou mieux, un dige
 ```bash
 docker rm -f back front
 
-docker run -d --name back -p 8081:8081 -v back-data:/data tp3-back:v2
+docker run -d --name back -p 8080:8080 -v back-data:/data tp3-back:v2
 docker run -d --name front -p 4200:4200 tp3-front:v2
 ```
 
-`BACKEND_URL` a désormais une valeur par défaut dans l'image (`http://localhost:8081`) : inutile de la préciser.
+`BACKEND_URL` a désormais une valeur par défaut dans l'image (`http://localhost:8080`) : inutile de la préciser.
 
 ```bash
 docker rm -f back
-docker run -d --name back -p 8081:8081 -v back-data:/data tp3-back:v2
+docker run -d --name back -p 8080:8080 -v back-data:/data tp3-back:v2
 ```
 
 Les données créées sont toujours présentes : la base SQLite vit dans le volume, pas dans le conteneur.
