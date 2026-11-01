@@ -7,7 +7,7 @@ objective: "Transformer une procédure d'installation manuelle en Dockerfile pou
 
 # Contexte
 
-Jusqu'ici, vous avez utilisé des images construites par d'autres. Votre équipe vous confie maintenant une application à conteneuriser : un **back** Spring Boot (Java 17, base SQLite) et un **front** Angular, dans un même dépôt.
+Jusqu'ici, vous avez utilisé des images construites par d'autres. Votre équipe vous confie maintenant une application à conteneuriser : un **back** Spring Boot (Java 21, base SQLite) et un **front** Angular, dans un même dépôt.
 
 La démarche est celle d'un projet réel :
 
@@ -48,7 +48,7 @@ Voici la procédure qu'un administrateur suivrait pour installer le back sur un 
 ```bash
 ## Installation pré-requis
 apt-get update
-apt-get install -y openjdk-17-jdk-headless maven
+apt-get install -y openjdk-21-jdk-headless maven
 
 ## Compilation
 mkdir -p /app
@@ -83,7 +83,7 @@ L'application écoute sur le port `8080`, sous le chemin `/api`, et stocke sa ba
 FROM ubuntu:24.04
 
 RUN apt-get update
-RUN apt-get install -y openjdk-17-jdk-headless maven
+RUN apt-get install -y openjdk-21-jdk-headless maven
 
 WORKDIR /app
 COPY . .
@@ -173,10 +173,10 @@ docker image history tp3-front:v1
 
 | Famille | Exemples | Taille | Débogage | Compatibilité |
 | --- | --- | --- | --- | --- |
-| Debian / Ubuntu | `ubuntu:24.04`, `debian:bookworm`, `eclipse-temurin:17-jdk` | La plus grosse | Shell, gestionnaire de paquets, outils courants | glibc : compatible avec quasiment tous les binaires Linux |
+| Debian / Ubuntu | `ubuntu:24.04`, `debian:bookworm`, `eclipse-temurin:21-jdk` | La plus grosse | Shell, gestionnaire de paquets, outils courants | glibc : compatible avec quasiment tous les binaires Linux |
 | `-slim` | `debian:bookworm-slim`, `node:22-slim` | Moyenne | Shell et `apt`, peu d'outils | glibc |
-| Alpine | `alpine:3`, `node:22-alpine`, `eclipse-temurin:17-jdk-alpine` | Très petite | Shell `ash` (BusyBox), `apk` | **musl** au lieu de glibc : certains binaires précompilés ne fonctionnent pas, comportements parfois différents (DNS, performances) |
-| Distroless | `gcr.io/distroless/java17-debian12` | Petite | **Aucun shell**, aucun gestionnaire de paquets | glibc |
+| Alpine | `alpine:3`, `node:22-alpine`, `eclipse-temurin:21-jdk-alpine` | Très petite | Shell `ash` (BusyBox), `apk` | **musl** au lieu de glibc : certains binaires précompilés ne fonctionnent pas, comportements parfois différents (DNS, performances) |
+| Distroless | `gcr.io/distroless/java21-debian12` | Petite | **Aucun shell**, aucun gestionnaire de paquets | glibc |
 
 **Ce que vous devez faire :**
 
@@ -241,7 +241,7 @@ Repartez de votre V1 et appliquez les règles suivantes, puis construisez `tp3-b
 FROM ubuntu:24.04
 
 RUN apt-get update \
- && apt-get install -y openjdk-17-jdk-headless maven \
+ && apt-get install -y openjdk21-jdk-headless maven \
  && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app app

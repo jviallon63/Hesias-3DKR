@@ -15,14 +15,17 @@ L'outil de ce TP est **Buildx**, le client de build de Docker, qui pilote le mot
 
 **Prérequis :**
 
-- TP 3 terminé : le dépôt est cloné dans `~/tp3`, et les `.dockerignore` du back et du front sont en place.
+- TP 3 terminé : le dépôt est cloné localement.
 - Les images du TP 3 (`tp3-back:v1`, `tp3-back:v2`, `tp3-front:v1`, `tp3-front:v2`) pour comparer les tailles. Si vous les avez supprimées, reconstruisez au moins les V2.
+- le plugin Buildx est installé. Il est fourni par défaut avec Docker Desktop. Si vous utilisez le client Docker installé par Homebrew sur macOS :
 
-```bash
-cd ~/tp3
-```
-
-> Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
+  ```bash
+  brew install docker-buildx
+  mkdir -p "$HOME/.docker/cli-plugins"
+  ln -sfn "$(brew --prefix)/opt/docker-buildx/bin/docker-buildx" \
+    "$HOME/.docker/cli-plugins/docker-buildx"
+  docker buildx version
+  ```
 
 ---
 
@@ -30,148 +33,69 @@ cd ~/tp3
 
 <div class="section objective">
 
-1. Distinguer les builders et drivers Buildx, et créer un builder dédié
-2. Séparer construction et exécution avec un Dockerfile multi-étapes
-3. Utiliser les montages de cache BuildKit pour accélérer les builds sans alourdir les images
-4. Choisir une image d'exécution minimale et non root
-5. Construire et publier une image multi-plateforme sans émulation inutile
-6. Appliquer un schéma de tags versionné et traçable
+1. Séparer construction et exécution avec un Dockerfile multi-étapes
+2. Utiliser les montages de cache BuildKit pour accélérer les builds sans alourdir les images
+3. Choisir une image d'exécution minimale et non root
+4. Construire et publier une image multi-plateforme sans émulation inutile
+5. Appliquer un schéma de tags versionné et traçable
 
 </div>
 
 ---
 
-## Étape 1 - Buildx, builders et registre local
-
-`docker build` est aujourd'hui un alias de `docker buildx build`. Buildx envoie le build à un **builder**, une instance de BuildKit, dont le **driver** détermine où et comment il tourne :
-
-| Driver | Où tourne BuildKit | Résultat du build | Multi-plateforme | Cache exportable |
-| --- | --- | --- | --- | --- |
-| `docker` (builder `default`) | Intégré au daemon Docker | Directement dans les images locales | Uniquement avec le *containerd image store* | Non |
-| `docker-container` | Dans un conteneur dédié | À charger (`--load`) ou à pousser (`--push`) | Oui | Oui |
-
-Pour publier des images multi-plateformes sans compte Docker Hub, vous allez utiliser un **registre local**, `registry:3`, l'implémentation de référence d'un registre d'images.
-
-**Ce que vous devez faire :**
-
-- Affichez la version de Buildx et la liste des builders existants. Relevez le driver et les plateformes du builder actif.
-- Lancez un registre local `registry` en arrière-plan, publié sur le port 5000.
-
-  > Sur macOS, le récepteur AirPlay occupe déjà le port 5000. Si le lancement échoue avec `address already in use` ou `ports are not available`, désactivez-le (Réglages système, Général, AirDrop et Handoff) ou utilisez un autre port partout dans ce TP.
-- Créez un fichier `~/tp3/buildkitd.toml` qui autorise BuildKit à joindre ce registre en HTTP simple :
-
-  ```toml
-  [registry."localhost:5000"]
-    http = true
-  ```
-
-- Créez un builder `tp4` avec le driver `docker-container`, sur le réseau de l'hôte (`--driver-opt network=host`) pour qu'il puisse joindre `localhost:5000`, avec ce fichier de configuration. Faites-en le builder actif.
-- Démarrez-le et affichez les plateformes qu'il sait produire. Retrouvez le conteneur qui l'exécute dans `docker ps`.
-
-**Questions de réflexion :**
-
-- Votre builder annonce des plateformes différentes de celle de votre machine. Comment peut-il produire une image `arm64` sur un processeur x86, ou l'inverse ?
-- Pourquoi BuildKit a-t-il besoin du réseau de l'hôte pour joindre `localhost:5000` ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 1</summary>
-{:/nomarkdown}
-
-```bash
-docker buildx version
-docker buildx ls
-```
-
-Le builder `default` utilise le driver `docker`. L'astérisque indique le builder actif.
-
-```bash
-docker run -d --name registry -p 5000:5000 registry:3
-
-cat > buildkitd.toml <<'EOF'
-[registry."localhost:5000"]
-  http = true
-EOF
-
-docker buildx create --name tp4 --driver docker-container \
-  --driver-opt network=host --buildkitd-config buildkitd.toml --use
-docker buildx inspect --bootstrap
-docker ps --filter name=buildx_buildkit
-```
-
-`inspect --bootstrap` démarre le conteneur `buildx_buildkit_tp40` et affiche la ligne `Platforms`, par exemple `linux/arm64, linux/amd64, linux/amd64/v2, linux/riscv64, linux/ppc64le, linux/s390x, linux/386, linux/arm/v7...`.
-
-Les plateformes étrangères sont exécutées par **émulation** : QEMU, enregistré dans le noyau via *binfmt_misc*, traduit à la volée les instructions d'une autre architecture. Docker Desktop l'installe d'office. Si votre builder n'annonce que votre plateforme native (Linux, Colima), installez-le :
-
-```bash
-docker run --privileged --rm tonistiigi/binfmt --install all
-```
-
-L'émulation fonctionne pour tout, mais elle est lente, souvent 5 à 20 fois plus qu'en natif. Vous verrez à l'étape 5 comment l'éviter.
-
-BuildKit tourne dans son propre conteneur : `localhost` y désigne le conteneur lui-même, pas la machine où le port 5000 est publié. Avec `network=host`, le conteneur partage la pile réseau de l'hôte (ou de la VM Docker sous Windows et macOS), où le registre est joignable.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 2 - Le back en multi-étapes
+## Étape 1 - Le back en multi-étapes
 
 Un Dockerfile multi-étapes contient plusieurs `FROM`. Chacun démarre une **étape** indépendante, que l'on peut nommer avec `AS`. Une étape peut copier des fichiers produits par une autre avec `COPY --from=<étape>`. **Seule la dernière étape** constitue l'image finale : tout le reste est jeté.
 
 **Ce que vous devez faire :**
 
 - Écrivez `back/Dockerfile` avec deux étapes :
-  - une étape `build`, basée sur `maven:3-eclipse-temurin-17`, qui compile le jar comme au TP 3 ;
-  - une étape finale, basée sur `eclipse-temurin:17-jre`, qui ne reçoit **que le jar**, et reprend la configuration de la V2 du TP 3 (`/data`, `VOLUME`, `DB_PATH`, utilisateur `ubuntu`, `EXPOSE`, `ENTRYPOINT` + `CMD`).
-- Construisez l'image `tp4-back:simple` et chargez-la dans vos images locales. Comparez sa taille avec `tp3-back:v1` et `tp3-back:v2`, et lisez son historique.
+  - une étape `build`, basée sur `maven:3-eclipse-temurin-21`, qui compile le jar comme au TP 3.
+  - une étape finale, basée sur `eclipse-temurin:21-jre-alpine`, qui ne reçoit **que le jar**, et reprend la configuration de la V2 du TP 3.
+- Construisez l'image `tp4-back:1.0.0` . Comparez sa taille avec `tp3-back:v1` et `tp3-back:v2`, et lisez son historique.
 - Construisez uniquement l'étape `build` sous le nom `tp4-back:build`, et ouvrez un shell dedans pour retrouver le jar.
 
 **Questions de réflexion :**
 
 - Qu'est-ce qui a disparu de l'image finale par rapport au TP 3 ? Que montre `docker history` des instructions de l'étape `build` ?
-- Pourquoi faut-il ajouter `--load` alors que ce n'était pas nécessaire au TP 3 ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 2</summary>
+<details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
 
 `back/Dockerfile` :
 
 ```dockerfile
-FROM maven:3-eclipse-temurin-17 AS build
+FROM maven:3-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
-RUN mvn -B dependency:go-offline
 COPY src ./src
-RUN mvn -B package -DskipTests
+RUN mvn package -DskipTests
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre-alpine
+RUN apk upgrade --no-cache
+RUN addgroup --system app && adduser --system --ingroup app app
 WORKDIR /app
 COPY --from=build /app/target/openapi-workshop-1.0.0.jar app.jar
 RUN mkdir /data && chown ubuntu:ubuntu /data
-VOLUME /data
-ENV DB_PATH=/data/app.db
-USER ubuntu
-EXPOSE 8081
+USER app
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 CMD ["--server.port=8081"]
 ```
 
 ```bash
-docker buildx build --load -t tp4-back:simple back/
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-back'
-docker history tp4-back:simple
+docker buildx build -t tp4-back:1.0.0 back/
+docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-back'
+docker image history tp4-back:1.0.0
 ```
 
-L'image ne contient plus ni Maven, ni le JDK, ni `~/.m2`, ni les sources : seulement un JRE et le jar. `docker history` ne montre **aucune** instruction de l'étape `build` : elle n'a laissé aucune trace dans l'image finale.
+L'image ne contient plus ni Maven, ni le JDK, ni `~/.m2`, ni les sources : seulement un JRE et le jar. `docker image history` ne montre **aucune** instruction de l'étape `build` : elle n'a laissé aucune trace dans l'image finale.
 
-Avec le driver `docker-container`, le résultat du build reste dans le cache du builder, à l'intérieur de son conteneur. `--load` l'exporte vers les images du daemon Docker. Sans `--load` ni `--push`, Buildx affiche un avertissement : l'image est construite mais inutilisable.
 
 ```bash
-docker buildx build --target build --load -t tp4-back:build back/
-docker run --rm -it tp4-back:build bash
+docker buildx build --target build -t tp4-back:build back/
+docker container run --rm -it tp4-back:build bash
 ls -lh target/*.jar
 exit
 ```
@@ -184,141 +108,15 @@ exit
 
 ---
 
-## Étape 3 - Le back, optimisé au maximum
+## Étape 2 - Le front en multi-étapes
 
-Trois leviers pour aller plus loin :
-
-1. **Le montage de cache** : `RUN --mount=type=cache,target=<dossier>` monte un dossier conservé par BuildKit **d'un build à l'autre**, mais jamais écrit dans une couche. Idéal pour `~/.m2`.
-2. **Le jar découpé en couches** : un jar Spring Boot regroupe les dépendances (lourdes, qui changent rarement) et votre code (léger, qui change à chaque version). Spring Boot sait l'extraire en quatre dossiers : `dependencies`, `spring-boot-loader`, `snapshot-dependencies` et `application`. Copiés dans quatre couches distinctes, ils permettent de ne republier et retélécharger que la couche `application` quand seul le code change.
-3. **Une image d'exécution distroless** : `gcr.io/distroless/java17-debian12:nonroot` ne contient qu'un JRE et ses bibliothèques, sans shell ni gestionnaire de paquets, et tourne avec l'utilisateur `nonroot` (UID 65532).
-
-**Ce que vous devez faire :**
-
-- Ajoutez en première ligne du Dockerfile la directive `# syntax=docker/dockerfile:1`.
-- Dans l'étape `build` :
-  - supprimez le `dependency:go-offline` et compilez avec un montage de cache sur `/root/.m2` ;
-  - dans la même instruction, extrayez le jar en couches avec `java -Djarmode=layertools -jar <jar> extract --destination /out/app` ;
-  - préparez un dossier vide `/out/data`, qui deviendra `/data`.
-- Dans l'étape finale, basée sur l'image distroless :
-  - copiez les quatre dossiers extraits dans `/app`, du moins changeant au plus changeant, avec une instruction `COPY` chacun ;
-  - créez `/data` pour l'utilisateur `nonroot`, **sans shell** ;
-  - lancez l'application avec `ENTRYPOINT ["/usr/bin/java", "org.springframework.boot.loader.launch.JarLauncher"]`.
-- Ajoutez les `LABEL` OCI de version et de révision Git, alimentés par `ARG APP_VERSION` et `ARG VCS_REF`.
-- Construisez `tp4-back:distroless`. Comparez sa taille et son historique.
-- Modifiez un fichier Java, reconstruisez, et observez : Maven retélécharge-t-il les dépendances ? Quelles couches de l'image finale ont changé ?
-- Lancez un conteneur et essayez d'y ouvrir un shell.
-
-**Questions de réflexion :**
-
-- Pourquoi `dependency:go-offline` n'est-il plus utile ?
-- Pourquoi `RUN mkdir /data` est-il impossible dans l'étape finale ?
-- Comment déboguer un conteneur qui n'a pas de shell ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 3</summary>
-{:/nomarkdown}
-
-`back/Dockerfile` :
-
-```dockerfile
-# syntax=docker/dockerfile:1
-
-FROM maven:3-eclipse-temurin-17 AS build
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B package -DskipTests \
- && java -Djarmode=layertools -jar target/openapi-workshop-1.0.0.jar extract --destination /out/app \
- && mkdir -p /out/data
-
-FROM gcr.io/distroless/java17-debian12:nonroot
-ARG APP_VERSION=dev
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.title="tp-back" \
-      org.opencontainers.image.version="${APP_VERSION}" \
-      org.opencontainers.image.revision="${VCS_REF}"
-
-WORKDIR /app
-COPY --from=build /out/app/dependencies/ ./
-COPY --from=build /out/app/spring-boot-loader/ ./
-COPY --from=build /out/app/snapshot-dependencies/ ./
-COPY --from=build /out/app/application/ ./
-COPY --from=build --chown=65532:65532 /out/data /data
-
-VOLUME /data
-ENV DB_PATH=/data/app.db
-EXPOSE 8081
-ENTRYPOINT ["/usr/bin/java", "org.springframework.boot.loader.launch.JarLauncher"]
-CMD ["--server.port=8081"]
-```
-
-```bash
-docker buildx build --load -t tp4-back:distroless back/
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-back'
-docker history tp4-back:distroless
-```
-
-La directive `# syntax` indique quelle version du frontend Dockerfile utiliser : BuildKit la télécharge au besoin, ce qui garantit l'accès aux fonctionnalités récentes (`--mount`, `--chmod`...) quelle que soit la version de Docker installée.
-
-Le cache `/root/.m2` survit aux builds suivants, même quand `COPY src` est invalidé : Maven ne retélécharge plus rien après une modification du code. `go-offline` servait à placer les dépendances dans une couche en cache ; le montage de cache rend ce contournement inutile, et le dépôt Maven n'est plus dans aucune image.
-
-Après une modification du code, seule la couche `application` (quelques Ko) change. Les couches `dependencies` (plusieurs dizaines de Mo) sont identiques, octet pour octet, à celles de la version précédente : un serveur qui met à jour l'image ne télécharge que la nouvelle couche.
-
-Le lanceur `JarLauncher` reconstitue le classpath à partir des dossiers extraits. Avec Spring Boot 3.3 et suivants, l'extraction s'écrit `java -Djarmode=tools -jar <jar> extract --layers --launcher --destination /out/app`.
-
-L'image distroless n'a pas de shell : `RUN mkdir` y est impossible. On crée le dossier dans l'étape `build`, où les outils existent, et on le copie avec le bon propriétaire.
-
-```bash
-docker run -d --name back -p 8081:8081 tp4-back:distroless
-docker exec -it back sh             # executable file not found
-```
-
-Pour déboguer, plusieurs options :
-
-- la variante `:debug-nonroot` de l'image distroless, qui embarque un shell BusyBox, à utiliser temporairement ;
-- un conteneur d'outils qui partage les namespaces du conteneur cible : `docker run --rm -it --pid=container:back --network=container:back alpine sh` ;
-- `docker debug back` (Docker Desktop) ou `kubectl debug` en Kubernetes.
-
-```bash
-docker rm -f back
-```
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 4 - Le front en multi-étapes
-
-L'exécution du front n'a besoin que du dossier `dist/browser` et d'un serveur web. On utilise `nginxinc/nginx-unprivileged`, variante de l'image nginx officielle qui tourne **sans root** et écoute donc sur le port **8080** (les ports inférieurs à 1024 sont réservés à root).
+L'exécution du front n'a besoin que du dossier `dist/browser` et d'un serveur web. On utilise `nginxinc/nginx-unprivileged`, variante de l'image nginx officielle qui tourne **sans root**.
 
 Il faut adapter deux éléments du TP 3 :
 
-- l'URL du back, écrite dans `assets/config.js` au démarrage. Le point d'entrée de l'image nginx exécute tous les scripts exécutables du dossier `/docker-entrypoint.d/` avant de lancer nginx : il suffit d'y placer un script ;
-- le routage d'Angular : une URL comme `/products/12` n'existe pas sur le disque, nginx doit renvoyer `index.html` et laisser Angular gérer la route.
+- l'URL du back, écrite dans `assets/config.js` au démarrage. Le point d'entrée de l'image nginx exécute tous les scripts exécutables du dossier `/docker-entrypoint.d/` avant de lancer nginx : il suffit d'y placer un script.
 
-**Ce que vous devez faire :**
-
-- Créez `front/docker/40-backend-url.sh`, qui écrit `/usr/share/nginx/html/assets/config.js` à partir de `BACKEND_URL` (inspirez-vous de `docker-entrypoint.sh`, sans le lancement du serveur).
-- Créez `front/docker/default.conf` : un serveur qui écoute sur 8080, sert `/usr/share/nginx/html` et renvoie `index.html` pour les chemins inconnus.
-- Écrivez `front/Dockerfile` avec :
-  - une étape `build` sur `node:22-alpine`, avec un montage de cache pour le cache npm (`/root/.npm`) et un autre pour le cache Angular (`/app/.angular/cache`) ;
-  - une étape finale sur `nginxinc/nginx-unprivileged:stable-alpine` qui reçoit la configuration, le script (exécutable, avec `COPY --chmod`) et le contenu de `dist/browser`, appartenant à l'utilisateur `nginx` (UID 101) pour que le script puisse écrire `config.js` ;
-  - une valeur par défaut pour `BACKEND_URL`, les `LABEL` OCI et `EXPOSE 8080`.
-- Construisez `tp4-front:nginx`, comparez sa taille avec celles du TP 3, et lancez-le en publiant le port 8080 du conteneur sur le port 4200 de l'hôte. Vérifiez le contenu de `/assets/config.js` et le fonctionnement de l'application avec le back.
-
-**Questions de réflexion :**
-
-- L'étape finale ne contient ni `ENTRYPOINT` ni `CMD`. Comment le conteneur sait-il quoi lancer ?
-- Pourquoi publier sur le port 4200 de l'hôte, et non sur 8080 ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 4</summary>
-{:/nomarkdown}
-
-`front/docker/40-backend-url.sh` :
+`/docker-entrypoint.d/40-backend-url.sh` :
 
 ```sh
 #!/bin/sh
@@ -330,11 +128,13 @@ window.dynamicConf = {
 EOF
 ```
 
-`front/docker/default.conf` :
+- le routage d'Angular : avec une configuration ngonx classique.
+
+`/etc/nginx/conf.d/default.conf` :
 
 ```nginx
 server {
-    listen 8080;
+    listen 4200;
     root /usr/share/nginx/html;
     index index.html;
 
@@ -348,51 +148,52 @@ server {
 }
 ```
 
+**Ce que vous devez faire :**
+
+- Écrivez `front/Dockerfile` avec :
+  - une étape `build` sur `node:22-alpine`.
+  - une étape finale sur `nginxinc/nginx-unprivileged:stable-alpine` qui reçoit la configuration, le script (exécutable, avec `COPY --chmod`) et le contenu de `dist/browser`, appartenant à l'utilisateur `nginx`.
+  - Supprimez la ligne `ENTRYPOINT` du Dockerfile.
+- Construisez `tp4-front-nginx:1.0.0`, comparez sa taille avec celles du TP 3, et lancez-le en publiant le port 8080 du conteneur sur le port 4200 de l'hôte. Vérifiez le fonctionnement de l'application avec le back.
+
+**Questions de réflexion :**
+
+- L'étape finale ne contient ni `ENTRYPOINT` ni `CMD`. Comment le conteneur sait-il quoi lancer ?
+
+{::nomarkdown}
+<details><summary>Solution - Étape 4</summary>
+{:/nomarkdown}
+
 `front/Dockerfile` :
 
 ```dockerfile
-# syntax=docker/dockerfile:1
-
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
-COPY . .
-RUN --mount=type=cache,target=/app/.angular/cache npx ng build
+COPY --chown=node:node . .
+RUN npm ci && npm cache clean --force
+RUN npx ng build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine
 ARG APP_VERSION=dev
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.title="tp-front" \
-      org.opencontainers.image.version="${APP_VERSION}" \
-      org.opencontainers.image.revision="${VCS_REF}"
 
 COPY docker/default.conf /etc/nginx/conf.d/default.conf
 COPY --chmod=755 docker/40-backend-url.sh /docker-entrypoint.d/40-backend-url.sh
 COPY --from=build --chown=101:101 /app/dist/browser /usr/share/nginx/html
 
-ENV BACKEND_URL=http://localhost:8081
-EXPOSE 8080
+ENV BACKEND_URL=http://localhost:8080
+EXPOSE 4200
 ```
 
 ```bash
-docker buildx build --load -t tp4-front:nginx front/
+docker buildx build -t tp4-front-nginx:1.0.0 front/
 docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-front'
 
-docker run -d --name back -p 8081:8081 tp4-back:distroless
-docker run -d --name front -p 4200:8080 tp4-front:nginx
+docker run -d --name back -p 8080:8080 tp4-back:1.0.0
+docker run -d --name front -p 4200:8080 tp4-front-nginx:1.0.0
 curl http://localhost:4200/assets/config.js
 ```
 
-L'image passe de plusieurs centaines de Mo à quelques dizaines : nginx sur Alpine et quelques Mo de fichiers statiques. Node.js, `node_modules` et les sources sont restés dans l'étape `build`.
-
 L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `CMD` (`nginx -g daemon off;`) de son image de base. Le point d'entrée exécute les scripts de `/docker-entrypoint.d/` dans l'ordre alphabétique (d'où le préfixe `40-`), puis lance nginx avec `exec`.
-
-Le back n'autorise (CORS) que les appels venant de l'origine `http://localhost:4200`. Publier le front sur le port 4200 de l'hôte conserve cette origine, quel que soit le port interne du conteneur.
-
-```bash
-docker rm -f back front
-```
 
 {::nomarkdown}
 </details>
@@ -400,7 +201,7 @@ docker rm -f back front
 
 ---
 
-## Étape 5 - Construire pour plusieurs plateformes
+## Étape 3 - Construire pour plusieurs plateformes
 
 Buildx construit une image par plateforme demandée, puis les regroupe sous un **index** (vu à l'étape 1 du TP 3). Le résultat ne peut pas être chargé tel quel dans les images locales classiques : on le pousse dans un registre.
 
@@ -434,7 +235,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 - Dans quel cas `--platform=$BUILDPLATFORM` ne suffirait-il pas ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
+<details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
 
 Premier build, sans `$BUILDPLATFORM` :
@@ -449,7 +250,7 @@ L'étape `build` est exécutée deux fois, dont une sous émulation : Maven tour
 Début de l'étape `build` du back après modification :
 
 ```dockerfile
-FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-17 AS build
+FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-21 AS build
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
@@ -493,7 +294,7 @@ Le driver SQLite (`sqlite-jdbc`) embarque ses bibliothèques natives pour toutes
 
 ---
 
-## Étape 6 - Nouveaux tags pour les builds
+## Étape 4 - Nouveaux tags pour les builds
 
 Au TP 3, les images s'appelaient `tp3-back:v2` : un nom local, une étiquette informelle. Une image destinée à être déployée doit avoir un nom complet (registre, espace, nom) et des tags qui disent **quelle version** et **quel code** elle contient.
 
@@ -516,11 +317,10 @@ Schéma adopté pour la suite :
 
 **Questions de réflexion :**
 
-- Ces images sont publiées en version `2.0.0`, et non `1.1.0`. Qu'est-ce qui, dans les changements de ce TP, casse la compatibilité pour quelqu'un qui déployait les images du TP 3 ? Pensez aux ports, et à l'utilisateur qui écrit dans le volume.
 - Pourquoi un tag `sha-...` en plus du tag de version ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 6</summary>
+<details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
 
 ```bash
@@ -569,76 +369,31 @@ Le tag de version dit ce que l'équipe a voulu publier ; le tag `sha-...` dit ex
 
 ---
 
-## Étape 7 - Bilan et ménage
+## Étape 5 - Ménage
 
 **Ce que vous devez faire :**
 
-- Lancez le back et le front en version `2.0.0` depuis le registre, avec un **nouveau** volume `tp4-data` pour la base. Créez des données, recréez le conteneur du back avec le même volume, et vérifiez la persistance.
-- Téléchargez `localhost:5000/tp/front:2.0.0` et complétez le tableau des tailles (`docker images`) :
-
-| Image | TP 3 V1 | TP 3 V2 | TP 4 |
-| --- | --- | --- | --- |
-| back | | | |
-| front | | | |
-
-- Faites le ménage : conteneurs, volume, registre, builder `tp4` et son cache, images de ce TP. Revenez au builder `default`.
+- Faites le ménage : conteneurs, volume, registre, builder.
 
 **Question de réflexion :**
 
 - `docker images` affiche la taille **décompressée** de l'image. Ce qui transite sur le réseau lors d'un `pull` est-il plus gros ou plus petit ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 7</summary>
+<details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
 
 ```bash
-docker run -d --name back -p 8081:8081 -v tp4-data:/data localhost:5000/tp/back:2.0.0
-docker run -d --name front -p 4200:8080 localhost:5000/tp/front:2.0.0
-# créer des données sur http://localhost:4200
-docker rm -f back
-docker run -d --name back -p 8081:8081 -v tp4-data:/data localhost:5000/tp/back:2.0.0
-
-docker pull localhost:5000/tp/front:2.0.0
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-|tp/'
-```
-
-Le back passe d'une image comprenant un système Ubuntu complet, un JDK, Maven et des centaines de Mo de dépendances à une image distroless contenant un JRE et l'application. Le front passe de plus d'un Go à quelques dizaines de Mo.
-
-Ménage :
-
-```bash
-docker rm -f back front registry
-docker volume rm tp4-data
-docker buildx use default
-docker buildx rm tp4                # supprime le builder, son conteneur et son cache
-docker rmi tp4-back:simple tp4-back:build tp4-back:distroless tp4-front:nginx \
-  localhost:5000/tp/back:2.0.0 localhost:5000/tp/front:2.0.0
-docker buildx prune                 # cache du builder default
+docker container rm -f ...
+docker image rm ...
+docker image prune -a
+docker buildx prune
 docker system df
+(docker system prune)
 ```
-
-Les couches sont compressées (gzip par défaut) dans le registre et pendant le transfert : un `pull` transfère moins que la taille affichée par `docker images`, et seulement les couches absentes de la machine. C'est là que le découpage en couches du back prend tout son sens : à chaque nouvelle version, seule la couche `application` transite.
 
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-
----
-
-## Récapitulatif
-
-| Pratique | Pourquoi |
-| --- | --- |
-| Étape de build et étape d'exécution séparées | Outils de compilation, caches et sources absents de l'image finale |
-| `--target` | Construire et inspecter une étape intermédiaire |
-| `RUN --mount=type=cache` | Caches de dépendances conservés entre les builds, jamais écrits dans l'image |
-| Jar découpé en couches | Seule la couche du code change d'une version à l'autre |
-| Image finale distroless ou spécialisée non root | Surface d'attaque minimale, pas de privilèges |
-| Pas de `RUN` dans l'étape finale | Image minimale, et pas d'émulation en multi-plateforme |
-| `FROM --platform=$BUILDPLATFORM` pour l'étape de build | Compiler une seule fois, en natif, ce qui ne dépend pas de l'architecture |
-| Compilation croisée avec `TARGETOS` / `TARGETARCH` | Produire du code natif pour chaque architecture sans émulation |
-| Builder `docker-container` + `--push` | Construire et publier un index multi-plateforme |
-| Tags `X.Y.Z`, `X.Y`, `X`, `latest`, `sha-<commit>` | Version immuable, tags mobiles pratiques, traçabilité jusqu'au commit |
-| Labels OCI `version` et `revision` | Retrouver l'origine d'une image à partir de l'image elle-même |
 
 {% endraw %}
