@@ -65,17 +65,13 @@ L'application écoute sur le port `8081`, sous le chemin `/api`, et stocke sa ba
 
 **Ce que vous devez faire :**
 
-- Écrivez `back/Dockerfile` en traduisant la procédure **le plus directement possible**, une commande par instruction. Ne cherchez pas encore à optimiser.
-- Construisez l'image `tp3-back:v1` en utilisant `back/` comme contexte de build. Notez le temps de construction.
-- Lancez un conteneur `back` en publiant le port 8081, puis ouvrez <http://localhost:8081/api/swagger-ui.html>.
-- Relevez la taille de l'image et affichez son historique avec `docker history`. Repérez les couches les plus lourdes.
+- Écrivez `back/Dockerfile` en traduisant la procédure **le plus directement possible**, une commande par instruction. L'image de base est `ubuntu:24.04`
+- Construisez l'image avec le nom `tp3-back:v1` en utilisant `back/` comme contexte de build.
+- Lancez un conteneur `back` en publiant le port 8081 et en utilisant un volume pour la base de données, puis testez avec <http://localhost:8081/api/swagger-ui.html>.
 
 **Questions de réflexion :**
 
-- Comment avez-vous traduit `export DEBIAN_FRONTEND=noninteractive` ? Avec `ENV` ou avec `ARG` ? Quelle conséquence pour le conteneur final ?
-- Comment avez-vous traduit `cd /app` ? Pourquoi un `RUN cd /app` ne fonctionnerait-il pas ?
-- Pourquoi utiliser `COPY` plutôt que `ADD` pour copier le code source ?
-- Que contient l'image en plus du jar nécessaire à l'exécution ?
+- Relevez la taille de l'image et affichez son historique. Identifiez les axes d'optimisation.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
@@ -86,7 +82,6 @@ L'application écoute sur le port `8081`, sous le chemin `/api`, et stocke sa ba
 ```dockerfile
 FROM ubuntu:24.04
 
-ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update
 RUN apt-get install -y openjdk-17-jdk-headless maven
 
@@ -99,29 +94,12 @@ CMD ["java", "-jar", "target/openapi-workshop-1.0.0.jar"]
 ```
 
 ```bash
-time docker build -t tp3-back:v1 back/
-docker run -d --name back -p 8081:8081 tp3-back:v1
-docker logs -f back                 # attendre « Started OpenapiWorkshopApplication »
-docker images tp3-back
-docker history tp3-back:v1
+docker build -t tp3-back:v1 back/
+docker container run -d --name back -p 8081:8081 -v ./tp3/data/:/data/ tp3-back:v1
+docker container logs -f back                 # attendre « Started OpenapiWorkshopApplication »
+docker image ls tp3-back
+docker image history tp3-back:v1
 ```
-
-Le dernier argument de `docker build` est le **contexte de build** : le dossier envoyé au daemon, seul endroit où `COPY` peut aller chercher des fichiers. Par défaut, le Dockerfile est cherché à sa racine.
-
-Chaque instruction `RUN`, `COPY` ou `ADD` crée une couche. `docker history` montre que l'image pèse plusieurs centaines de Mo, répartis entre :
-
-- la couche `apt-get install` : JDK complet (compilateur compris), Maven et leurs dépendances ;
-- la couche `apt-get update` : les index de paquets, inutiles une fois l'installation faite ;
-- la couche `mvn package` : le dépôt local Maven (`/root/.m2`, toutes les dépendances téléchargées) et le dossier `target/` avec les classes compilées ;
-- la couche `COPY` : tout le code source.
-
-Seul le jar et un environnement d'exécution Java sont nécessaires pour faire tourner l'application.
-
-`ENV DEBIAN_FRONTEND=noninteractive` fonctionne, mais la variable reste définie dans tous les conteneurs lancés à partir de l'image, où elle n'a rien à faire. `ARG DEBIAN_FRONTEND=noninteractive` limite sa portée au build : c'est la bonne traduction d'un réglage qui ne concerne que l'installation.
-
-Chaque `RUN` s'exécute dans un nouveau shell : un `RUN cd /app` n'aurait aucun effet sur l'instruction suivante. `WORKDIR` est l'instruction prévue pour cela, et elle définit aussi le répertoire courant du conteneur.
-
-`ADD` extrait automatiquement les archives tar et peut télécharger des URL. Ces comportements implicites surprennent : un fichier `.tar.gz` copié avec `ADD` arrive décompressé, et un téléchargement par URL échappe au cache et à la vérification d'intégrité si l'on ne précise pas `--checksum`. On réserve donc `ADD` aux cas où l'on veut explicitement l'extraction, et on utilise `COPY` partout ailleurs.
 
 {::nomarkdown}
 </details>
@@ -131,7 +109,7 @@ Chaque `RUN` s'exécute dans un nouveau shell : un `RUN cd /app` n'aurait aucun 
 
 ## Étape 2 - Du shell au Dockerfile : le front, V1
 
-Voici la procédure d'installation du front, sur une machine où **Node.js 22** est déjà installé (image officielle `node:22`), en root :
+Voici la procédure d'installation du front, sur une machine où **Node.js 22** est déjà installé (image officielle `node:22`) :
 
 ```bash
 mkdir -p /app
@@ -148,18 +126,28 @@ export BACKEND_URL=http://localhost:8081
 
 Le script `docker-entrypoint.sh` écrit l'URL du back dans `/app/dist/browser/assets/config.js`, que le navigateur charge au démarrage de l'application, puis lance le serveur web `serve` sur le port 4200 avec `exec`.
 
+`front/docker-entrypoint.sh` :
+
+```sh
+#!/bin/sh
+set -eu
+cat > /app/dist/browser/assets/config.js <<EOF
+window.dynamicConf = {
+  BACKEND_URL: "${BACKEND_URL}"
+};
+EOF
+exec serve -l 4200 /app/dist/browser
+```
+
 **Ce que vous devez faire :**
 
 - Écrivez `front/Dockerfile` en traduisant la procédure le plus directement possible.
 - Construisez l'image `tp3-front:v1`, lancez un conteneur `front` en publiant le port 4200 et en définissant `BACKEND_URL`. Vérifiez que l'application s'affiche sur <http://localhost:4200> et qu'elle affiche les données du back.
-- Relevez la taille de l'image et lisez son historique.
-- Le script doit-il être lancé par `CMD` ou par `ENTRYPOINT` ? Testez la différence : lancez un conteneur `tp3-front:v1` en ajoutant `sh` à la fin de la commande `docker run -it --rm`.
 
 **Questions de réflexion :**
 
 - Quelle est la différence entre `CMD` et `ENTRYPOINT` ? Que se passe-t-il quand on combine les deux ?
-- Pourquoi la forme `["...", "..."]` (dite *exec*) est-elle préférable à la forme `CMD commande arguments` (dite *shell*) ?
-- Pourquoi le script se termine-t-il par `exec serve ...` plutôt que par `serve ...` ?
+- Relevez la taille de l'image et affichez son historique. Identifiez les axes d'optimisation.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
@@ -182,15 +170,11 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 ```
 
 ```bash
-time docker build -t tp3-front:v1 front/
-docker run -d --name front -p 4200:4200 -e BACKEND_URL=http://localhost:8081 tp3-front:v1
-docker images tp3-front
-docker history tp3-front:v1
+docker build -t tp3-front:v1 front/
+docker container run -d --name front -p 4200:4200 -e BACKEND_URL=http://localhost:8081 tp3-front:v1
+docker image ls tp3-front
+docker image history tp3-front:v1
 ```
-
-C'est le navigateur, sur votre poste, qui appelle le back : `BACKEND_URL` doit donc être une adresse joignable depuis votre machine (`localhost:8081`, le port publié du back), pas depuis le conteneur du front.
-
-L'image dépasse le Go : `node:22` est basée sur une Debian complète, et `node_modules` contient tout l'outillage de build d'Angular, inutile pour servir des fichiers statiques.
 
 Combinaison de `ENTRYPOINT` et `CMD` :
 
@@ -200,15 +184,11 @@ Combinaison de `ENTRYPOINT` et `CMD` :
 | `["/app/docker-entrypoint.sh"]` | absent | `/app/docker-entrypoint.sh` | `/app/docker-entrypoint.sh xyz` |
 | `["java", "-jar", "app.jar"]` | `["--server.port=8081"]` | `java -jar app.jar --server.port=8081` | `java -jar app.jar xyz` |
 
-`CMD` est une valeur par défaut que les arguments de `docker run` remplacent. `ENTRYPOINT` est le programme à lancer quoi qu'il arrive ; `CMD` lui fournit alors des arguments par défaut. Avec `docker run -it --rm tp3-front:v1 sh`, `sh` est passé en argument au script, qui l'ignore et lance `serve` quand même. Pour remplacer le point d'entrée, il faut `--entrypoint` :
+`CMD` est une valeur par défaut que les arguments de `docker run` remplacent. `ENTRYPOINT` est le programme à lancer quoi qu'il arrive ; `CMD` lui fournit alors des arguments par défaut. Avec `docker container run -it --rm tp3-front:v1 sh`, `sh` est passé en argument au script, qui l'ignore et lance `serve` quand même. Pour remplacer le point d'entrée, il faut `--entrypoint` :
 
 ```bash
-docker run -it --rm --entrypoint sh tp3-front:v1
+docker container run -it --rm --entrypoint sh tp3-front:v1
 ```
-
-La forme *shell* (`CMD serve -l 4200`) lance en réalité `/bin/sh -c "serve -l 4200"` : c'est `sh` qui reçoit le PID 1, et les signaux envoyés par `docker stop` (`SIGTERM`) ne parviennent pas à l'application, qui est tuée brutalement au bout de 10 secondes. La forme *exec* lance directement le programme.
-
-Pour la même raison, `exec serve ...` **remplace** le processus du script par `serve`, qui devient le PID 1 et reçoit les signaux. Sans `exec`, le script resterait PID 1 et `serve` un simple processus enfant.
 
 {::nomarkdown}
 </details>
