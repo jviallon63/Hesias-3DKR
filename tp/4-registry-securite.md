@@ -9,24 +9,6 @@ objective: "Héberger un registre privé authentifié, y publier des images avec
 
 Vos images sont prêtes. Pour être déployées, elles doivent être publiées dans un **registre** accessible aux serveurs, et elles doivent être **sûres** : une image embarque un système, des bibliothèques et parfois, par erreur, des secrets. Chacun de ces éléments peut contenir des vulnérabilités connues, publiées sous forme de **CVE** (*Common Vulnerabilities and Exposures*).
 
-Dans ce TP, vous allez :
-
-- héberger votre propre registre, protégé par mot de passe ;
-- constater ce qui se passe quand on publie sans gérer les versions, puis avec ;
-- scanner une image volontairement vulnérable avec **Trivy**, la corriger, et appliquer la même démarche aux images de l'application ;
-- durcir l'exécution des conteneurs.
-
-**Prérequis :**
-
-- TP 5 terminé : le dépôt est dans `~/tp3`, avec `compose.yaml` et `.env`.
-- Le port 5000 de votre machine est libre. Sur macOS, le récepteur AirPlay l'occupe : désactivez-le (Réglages système, Général, AirDrop et Handoff) ou utilisez un autre port partout dans ce TP.
-
-```bash
-mkdir -p ~/tp4 && cd ~/tp4
-```
-
-> Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
-
 ---
 
 ## Objectifs
@@ -50,61 +32,49 @@ Un registre est un serveur HTTP qui stocke des manifestes et des couches, et exp
 
 **Ce que vous devez faire :**
 
-- Générez un fichier `~/tp4/registry/auth/htpasswd` contenant un utilisateur `etudiant` avec le mot de passe `tp4-Registre`, haché avec bcrypt. L'image `registry` ne fournit pas l'outil `htpasswd` : utilisez celui de l'image `httpd:2`.
-- Écrivez `~/tp4/registry/compose.yaml` pour un service `registry` basé sur `registry:3` :
-  - port 5000 publié ;
-  - images stockées dans un volume nommé, monté sur `/var/lib/registry` ;
-  - authentification `htpasswd` activée par les variables `REGISTRY_AUTH`, `REGISTRY_AUTH_HTPASSWD_REALM` et `REGISTRY_AUTH_HTPASSWD_PATH`, avec le dossier `auth` monté en lecture seule.
-- Démarrez le registre. Interrogez son API sans identifiants, puis avec : `GET /v2/` et `GET /v2/_catalog`.
+- Générez un fichier `auth/htpasswd` contenant un utilisateur `etudiant` avec le mot de passe de votre choix, à l'aide de la commande `htpasswd -Bbn etudiant <my-password> > auth/htpasswd`. Pas besoin d'installer htpasswd, utilisez l'image `httpd:2` pour se faire !
+- Créer un volume nommé registry-data pour stocker les images du registre.
+- Demarrez un conteneur `registry` depuis l'image `registry:3` :
+  - port 5000 publié.
+  - images stockées dans le volume nommé `registry-data`, monté sur `/var/lib/registry`.
+  - authentification `htpasswd` activée par les variables `REGISTRY_AUTH = htpasswd`, `REGISTRY_AUTH_HTPASSWD_REALM = "Registre local"` et `REGISTRY_AUTH_HTPASSWD_PATH = /auth/htpasswd`, avec le dossier `auth` monté en lecture seule.
+- Interrogez son API `GET /v2/` sans et avec authentification (`curl -u <user>:<password>`). Essayez avec `GET /v2/_catalog`.
 
 **Questions de réflexion :**
 
-- Le mot de passe apparaît en clair dans la commande de génération. Où risque-t-il d'être conservé ?
-- Pourquoi l'algorithme bcrypt (`-B`) plutôt qu'un simple hachage ?
+- Comment gérer plus facilement les multiples variables d'environnements ?
+- Une UI existe pour `registry:3`, essayez de la démarrer à coté : [docker-registry-ui](https://github.com/joxit/docker-registry-ui)
+  - Vous devez utilisez les réseaux docker pour avoir `regsitry`et `registry-ui` sur le même réseau. `registry-ui` accède à `registry` avec `http://registry:5000`
 
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
 
 ```bash
-mkdir -p ~/tp4/registry/auth && cd ~/tp4/registry
-docker run --rm --entrypoint htpasswd httpd:2 -Bbn etudiant tp4-Registre > auth/htpasswd
+mkdir auth
+docker run --rm httpd:2 htpasswd -Bbn etudiant tp4-Registre > auth/htpasswd
 cat auth/htpasswd       # etudiant:$2y$05$...
+
+docker volume create registry-data
+docker container run --name registry -d -p 5001:5000 -v registry-data:/var/lib/registry -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM="Registre local" -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd -v ./tp/tp4/auth:/auth:ro registry:3 # Port 5001 sur Mac car 5000 déjà occupé.
+
+curl http://localhost:5001/v2/                                      # 401 Unauthorized
+curl -u etudiant:tp4-Registre http://localhost:5001/v2/             # {}
+curl -u etudiant:tp4-Registre http://localhost:5001/v2/_catalog     # {"repositories":[]}
 ```
 
-`compose.yaml` :
-
-```yaml
-services:
-  registry:
-    image: registry:3
-    ports:
-      - "5000:5000"
-    environment:
-      REGISTRY_AUTH: htpasswd
-      REGISTRY_AUTH_HTPASSWD_REALM: "Registre tp4"
-      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
-    volumes:
-      - registry-data:/var/lib/registry
-      - ./auth:/auth:ro
-
-volumes:
-  registry-data:
-```
+`docker-registry-ui`
 
 ```bash
-docker compose up -d
-curl -i http://localhost:5000/v2/                                   # 401 Unauthorized
-curl -u etudiant:tp4-Registre http://localhost:5000/v2/             # {}
-curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog     # {"repositories":[]}
-cd ~/tp4
+docker network create registry-net
+docker network connect registry-net registry
+docker container run -d --name registry-ui \
+  --network registry-net \
+  -p 8080:80 \
+  -e SINGLE_REGISTRY=true \
+  -e NGINX_PROXY_PASS_URL=http://registry:5000 \
+  joxit/docker-registry-ui:latest
 ```
-
-La réponse `401` contient un en-tête `WWW-Authenticate: Basic realm="Registre tp4"` : c'est lui qui indique au client Docker comment s'authentifier.
-
-Un mot de passe passé en argument reste dans l'historique du shell (`~/.zsh_history`, `~/.bash_history`) et est visible par les autres utilisateurs de la machine dans la liste des processus pendant l'exécution. En dehors d'un TP, on le saisit de façon interactive (`htpasswd -B` sans `-b`) ou on le lit depuis un fichier.
-
-bcrypt est volontairement **lent** et salé : même si le fichier `htpasswd` fuite, retrouver les mots de passe par force brute coûte très cher. Un hachage rapide comme MD5 ou SHA-1 se casse en quelques secondes pour un mot de passe courant.
 
 {::nomarkdown}
 </details>
