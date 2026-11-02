@@ -1,5 +1,5 @@
 ---
-title: "TP 4 - Builds multi-étapes et multi-plateformes avec Buildx"
+title: "TP 5 - Builds multi-étapes et multi-plateformes avec Buildx"
 objective: "Réécrire les images du TP 3 avec des builds multi-étapes et les caches BuildKit pour les réduire au strict nécessaire, puis les construire pour plusieurs architectures et les publier avec un schéma de tags versionné."
 ---
 
@@ -51,8 +51,8 @@ Un Dockerfile multi-étapes contient plusieurs `FROM`. Chacun démarre une **ét
 - Écrivez `back/Dockerfile` avec deux étapes :
   - une étape `build`, basée sur `maven:3-eclipse-temurin-21`, qui compile le jar comme au TP 3.
   - une étape finale, basée sur `eclipse-temurin:21-jre-alpine`, qui ne reçoit **que le jar**, et reprend la configuration de la V2 du TP 3.
-- Construisez l'image `tp4-back:1.0.0` . Comparez sa taille avec `tp3-back:v1` et `tp3-back:v2`, et lisez son historique.
-- Construisez uniquement l'étape `build` sous le nom `tp4-back:build`, et ouvrez un shell dedans pour retrouver le jar.
+- Construisez l'image `tp5-back:1.0.0` . Comparez sa taille avec `tp3-back:v1` et `tp3-back:v2`, et lisez son historique.
+- Construisez uniquement l'étape `build` sous le nom `tp5-back:build`, et ouvrez un shell dedans pour retrouver le jar.
 
 **Questions de réflexion :**
 
@@ -84,17 +84,17 @@ CMD ["--server.port=8080"]
 ```
 
 ```bash
-docker buildx build -t tp4-back:1.0.0 back/
+docker buildx build -t tp5-back:1.0.0 back/
 docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'tp[34]-back'
-docker image history tp4-back:1.0.0
+docker image history tp5-back:1.0.0
 ```
 
 L'image ne contient plus ni Maven, ni le JDK, ni `~/.m2`, ni les sources : seulement un JRE et le jar. `docker image history` ne montre **aucune** instruction de l'étape `build` : elle n'a laissé aucune trace dans l'image finale.
 
 
 ```bash
-docker buildx build --target build -t tp4-back:build back/
-docker container run --rm -it tp4-back:build bash
+docker buildx build --target build -t tp5-back:build back/
+docker container run --rm -it tp5-back:build bash
 ls -l target/*.jar
 ```
 
@@ -152,14 +152,14 @@ server {
   - une étape `build` sur `node:22-alpine`.
   - une étape finale sur `nginxinc/nginx-unprivileged:stable-alpine` qui reçoit la configuration, le script (exécutable, avec `COPY --chmod`) et le contenu de `dist/browser`, appartenant à l'utilisateur `nginx`.
   - Supprimez la ligne `ENTRYPOINT` du Dockerfile.
-- Construisez `tp4-front-nginx:1.0.0`, comparez sa taille avec celles du TP 3, et lancez-le en publiant le port 8080 du conteneur sur le port 4200 de l'hôte. Vérifiez le fonctionnement de l'application avec le back.
+- Construisez `tp5-front-nginx:1.0.0`, comparez sa taille avec celles du TP 3, et lancez-le en publiant le port 8080 du conteneur sur le port 4200 de l'hôte. Vérifiez le fonctionnement de l'application avec le back.
 
 **Questions de réflexion :**
 
 - L'étape finale ne contient ni `ENTRYPOINT` ni `CMD`. Comment le conteneur sait-il quoi lancer ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 4</summary>
+<details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
 
 `front/Dockerfile` :
@@ -182,11 +182,11 @@ EXPOSE 4200
 ```
 
 ```bash
-docker buildx build -t tp4-front-nginx:1.0.0 front/
+docker buildx build -t tp5-front-nginx:1.0.0 front/
 docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
 
-docker container run -d --name back -p 8080:8080 tp4-back:1.0.0
-docker container run -d --name front -p 4200:4200 tp4-front-nginx:1.0.0
+docker container run -d --name back -p 8080:8080 tp5-back:1.0.0
+docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 ```
 
 L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `CMD` (`nginx -g daemon off;`) de son image de base. Le point d'entrée exécute les scripts de `/docker-entrypoint.d/` dans l'ordre alphabétique (d'où le préfixe `40-`), puis lance nginx avec `exec`.
@@ -199,8 +199,6 @@ L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `C
 
 ## Étape 3 - Construire pour plusieurs plateformes
 
-Buildx construit une image par plateforme demandée, puis les regroupe sous un **index** (vu à l'étape 1 du TP 3). Le résultat ne peut pas être chargé tel quel dans les images locales classiques : on le pousse dans un registre.
-
 Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sous émulation pour les plateformes étrangères. Or un jar et un dossier `dist/` sont identiques quelle que soit l'architecture. BuildKit fournit des variables pour en tirer parti :
 
 | Variable | Valeur |
@@ -211,7 +209,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 
 **Ce que vous devez faire :**
 
-- Construisez le back pour `linux/amd64` et `linux/arm64`, et poussez-le sous `localhost:5000/tp/back:test`. Notez le temps de build.
+- Avec l'option `--platform`, construisez le back pour `linux/amd64` et `linux/arm64`. Notez le temps de build.
 - Ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. Ajoutez dans l'étape `build` du back, juste après `FROM`, les lignes suivantes :
 
   ```dockerfile
@@ -220,7 +218,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
   RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
   ```
 
-- Reconstruisez les deux images pour les deux plateformes avec `--progress=plain`, poussez-les sous `localhost:5000/tp/back:test` et `localhost:5000/tp/front:test`. Comparez le temps de build du back et lisez les lignes produites par `echo`.
+- Reconstruisez les deux images (back et front) pour les deux plateformes avec `--progress=plain`. Comparez le temps de build du back et lisez les lignes produites par `echo`.
 - Affichez l'index des deux images avec `docker buildx imagetools inspect`. Combien d'entrées comptez-vous ? À quoi correspondent les entrées `unknown/unknown` ?
 - Lancez le front en forçant l'architecture qui **n'est pas** celle de votre machine, en lui faisant afficher `uname -m` au lieu de démarrer nginx.
 

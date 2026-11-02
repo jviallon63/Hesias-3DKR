@@ -1,5 +1,5 @@
 ---
-title: "TP 5 - Orchestrer l'application avec Docker Compose"
+title: "TP 6 - Orchestrer l'application avec Docker Compose"
 objective: "Décrire l'application complète (front, back, base PostgreSQL) dans un fichier Compose, maîtriser réseaux, volumes, ports et variables d'environnement, et exploiter la pile avec les commandes docker compose."
 ---
 

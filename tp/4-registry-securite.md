@@ -1,5 +1,5 @@
 ---
-title: "TP 6 - Registre privé et sécurité des images"
+title: "TP 4 - Registre privé et sécurité des images"
 objective: "Héberger un registre privé authentifié, y publier des images avec et sans gestion de version, détecter vulnérabilités, secrets et mauvaises configurations avec Trivy, corriger les images et durcir leur exécution."
 ---
 
@@ -22,7 +22,7 @@ Dans ce TP, vous allez :
 - Le port 5000 de votre machine est libre. Sur macOS, le récepteur AirPlay l'occupe : désactivez-le (Réglages système, Général, AirDrop et Handoff) ou utilisez un autre port partout dans ce TP.
 
 ```bash
-mkdir -p ~/tp6 && cd ~/tp6
+mkdir -p ~/tp4 && cd ~/tp4
 ```
 
 > Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
@@ -50,8 +50,8 @@ Un registre est un serveur HTTP qui stocke des manifestes et des couches, et exp
 
 **Ce que vous devez faire :**
 
-- Générez un fichier `~/tp6/registry/auth/htpasswd` contenant un utilisateur `etudiant` avec le mot de passe `Tp6-Registre`, haché avec bcrypt. L'image `registry` ne fournit pas l'outil `htpasswd` : utilisez celui de l'image `httpd:2`.
-- Écrivez `~/tp6/registry/compose.yaml` pour un service `registry` basé sur `registry:3` :
+- Générez un fichier `~/tp4/registry/auth/htpasswd` contenant un utilisateur `etudiant` avec le mot de passe `tp4-Registre`, haché avec bcrypt. L'image `registry` ne fournit pas l'outil `htpasswd` : utilisez celui de l'image `httpd:2`.
+- Écrivez `~/tp4/registry/compose.yaml` pour un service `registry` basé sur `registry:3` :
   - port 5000 publié ;
   - images stockées dans un volume nommé, monté sur `/var/lib/registry` ;
   - authentification `htpasswd` activée par les variables `REGISTRY_AUTH`, `REGISTRY_AUTH_HTPASSWD_REALM` et `REGISTRY_AUTH_HTPASSWD_PATH`, avec le dossier `auth` monté en lecture seule.
@@ -67,8 +67,8 @@ Un registre est un serveur HTTP qui stocke des manifestes et des couches, et exp
 {:/nomarkdown}
 
 ```bash
-mkdir -p ~/tp6/registry/auth && cd ~/tp6/registry
-docker run --rm --entrypoint htpasswd httpd:2 -Bbn etudiant Tp6-Registre > auth/htpasswd
+mkdir -p ~/tp4/registry/auth && cd ~/tp4/registry
+docker run --rm --entrypoint htpasswd httpd:2 -Bbn etudiant tp4-Registre > auth/htpasswd
 cat auth/htpasswd       # etudiant:$2y$05$...
 ```
 
@@ -82,7 +82,7 @@ services:
       - "5000:5000"
     environment:
       REGISTRY_AUTH: htpasswd
-      REGISTRY_AUTH_HTPASSWD_REALM: "Registre TP6"
+      REGISTRY_AUTH_HTPASSWD_REALM: "Registre tp4"
       REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
     volumes:
       - registry-data:/var/lib/registry
@@ -95,12 +95,12 @@ volumes:
 ```bash
 docker compose up -d
 curl -i http://localhost:5000/v2/                                   # 401 Unauthorized
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/             # {}
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/_catalog     # {"repositories":[]}
-cd ~/tp6
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/             # {}
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog     # {"repositories":[]}
+cd ~/tp4
 ```
 
-La réponse `401` contient un en-tête `WWW-Authenticate: Basic realm="Registre TP6"` : c'est lui qui indique au client Docker comment s'authentifier.
+La réponse `401` contient un en-tête `WWW-Authenticate: Basic realm="Registre tp4"` : c'est lui qui indique au client Docker comment s'authentifier.
 
 Un mot de passe passé en argument reste dans l'historique du shell (`~/.zsh_history`, `~/.bash_history`) et est visible par les autres utilisateurs de la machine dans la liste des processus pendant l'exécution. En dehors d'un TP, on le saisit de façon interactive (`htpasswd -B` sans `-b`) ou on le lit depuis un fichier.
 
@@ -118,7 +118,7 @@ Le nom d'une image indique **où** la pousser : `localhost:5000/site:1.0.0` dés
 
 **Ce que vous devez faire :**
 
-- Créez une petite image de démonstration dans `~/tp6/site` : un `index.html` contenant `<h1>Version 1</h1>`, servi par `nginxinc/nginx-unprivileged:stable-alpine`. Construisez-la sous le nom `localhost:5000/site:latest`.
+- Créez une petite image de démonstration dans `~/tp4/site` : un `index.html` contenant `<h1>Version 1</h1>`, servi par `nginxinc/nginx-unprivileged:stable-alpine`. Construisez-la sous le nom `localhost:5000/site:latest`.
 - Poussez-la **sans** vous être authentifié. Lisez l'erreur.
 - Authentifiez-vous auprès du registre sans taper le mot de passe dans la commande, puis poussez à nouveau.
 - Trouvez où Docker a enregistré vos identifiants. Sont-ils chiffrés ?
@@ -135,7 +135,7 @@ Le nom d'une image indique **où** la pousser : `localhost:5000/site:1.0.0` dés
 {:/nomarkdown}
 
 ```bash
-mkdir -p ~/tp6/site
+mkdir -p ~/tp4/site
 echo '<h1>Version 1</h1>' > site/index.html
 cat > site/Dockerfile <<'EOF'
 FROM nginxinc/nginx-unprivileged:stable-alpine
@@ -165,7 +165,7 @@ Deux cas :
 ```bash
 docker rmi localhost:5000/site:latest
 docker pull localhost:5000/site:latest
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/_catalog     # {"repositories":["site"]}
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog     # {"repositories":["site"]}
 ```
 
 ```bash
@@ -214,7 +214,7 @@ docker image inspect -f '{{index .RepoDigests 0}}' localhost:5000/site:latest
 echo '<h1>Version 2 (buguée)</h1>' > site/index.html
 docker build -t localhost:5000/site:latest site/
 docker push localhost:5000/site:latest
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/site/tags/list    # {"name":"site","tags":["latest"]}
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/site/tags/list    # {"name":"site","tags":["latest"]}
 docker image inspect -f '{{index .RepoDigests 0}}' localhost:5000/site:latest
 ```
 
@@ -269,7 +269,7 @@ echo '<h1>Version 1.0.1</h1>' > site/index.html
 docker build -t $R:1.0.1 -t $R:1.0 -t $R:1 -t $R:latest site/
 docker push --all-tags $R
 
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/site/tags/list
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/site/tags/list
 # {"name":"site","tags":["1","1.0","1.0.0","1.0.1","latest"]}
 ```
 
@@ -322,10 +322,10 @@ trivy() {
 
 > Épinglez toujours la version d'un outil de sécurité. Il a accès à vos images et à votre socket Docker : il est lui-même une cible de choix pour une attaque de la chaîne d'approvisionnement.
 
-Voici l'image d'une « vitrine » écrite à la hâte. Créez-la dans `~/tp6/vitrine` :
+Voici l'image d'une « vitrine » écrite à la hâte. Créez-la dans `~/tp4/vitrine` :
 
 ```bash
-mkdir -p ~/tp6/vitrine && cd ~/tp6/vitrine
+mkdir -p ~/tp4/vitrine && cd ~/tp4/vitrine
 echo '<h1>Vitrine</h1>' > index.html
 ssh-keygen -t ed25519 -N '' -q -f id_ed25519     # « clé de déploiement » oubliée là
 cat > Dockerfile <<'EOF'
@@ -334,7 +334,7 @@ COPY id_ed25519 /root/.ssh/id_ed25519
 COPY index.html /usr/share/nginx/html/index.html
 EOF
 docker build -t localhost:5000/vitrine:1.0.0 .
-cd ~/tp6
+cd ~/tp4
 ```
 
 **Ce que vous devez faire :**
@@ -405,7 +405,7 @@ Retirer la clé du Dockerfile ne suffit pas : elle reste dans l'image `1.0.0`, d
 {:/nomarkdown}
 
 ```bash
-cd ~/tp6/vitrine
+cd ~/tp4/vitrine
 rm -f id_ed25519 id_ed25519.pub
 printf 'id_*\n*.pem\n.ssh\n.git\n' > .dockerignore
 cat > Dockerfile <<'EOF'
@@ -416,7 +416,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 EOF
 docker build -t localhost:5000/vitrine:1.0.1 .
-cd ~/tp6
+cd ~/tp4
 
 trivy image localhost:5000/vitrine:1.0.1
 trivy config vitrine/
@@ -477,7 +477,7 @@ L'image `1.0.1` ne changera pas, mais de nouvelles CVE seront publiées sur ses 
 ```bash
 cd ~/tp3
 docker compose build
-cd ~/tp6
+cd ~/tp4
 trivy image tp/back:2.0.0
 trivy image tp/front:2.0.0
 ```
@@ -490,7 +490,7 @@ Ces vulnérabilités viennent de la version de Spring Boot figée dans `pom.xml`
 cd ~/tp3
 sed -i.bak 's/^APP_VERSION=.*/APP_VERSION=2.0.1/' .env
 docker compose build --pull
-cd ~/tp6
+cd ~/tp4
 
 for app in back front; do
   trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed tp/$app:2.0.1 || echo "$app bloqué"
@@ -506,7 +506,7 @@ for app in back front; do
   done
   docker push --all-tags localhost:5000/tp/$app
 done
-curl -u etudiant:Tp6-Registre http://localhost:5000/v2/_catalog
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog
 ```
 
 Mettre à jour une dépendance sans changer le comportement ni l'interface de l'application est un **correctif** : `2.0.1`. On réserve `2.1.0` aux nouvelles fonctionnalités compatibles, `3.0.0` aux ruptures.
@@ -616,7 +616,7 @@ docker rm -f durci
 
 ```bash
 docker rm -f prod
-cd ~/tp6/registry && docker compose down -v && cd ~/tp6
+cd ~/tp4/registry && docker compose down -v && cd ~/tp4
 docker logout localhost:5000
 cat ~/.docker/config.json
 
