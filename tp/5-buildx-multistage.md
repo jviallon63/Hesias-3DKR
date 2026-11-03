@@ -17,6 +17,7 @@ L'outil de ce TP est **Buildx**, le client de build de Docker, qui pilote le mot
 
 - TP 3 terminé : le dépôt est cloné localement.
 - Les images du TP 3 (`tp3-back:v1`, `tp3-back:v2`, `tp3-front:v1`, `tp3-front:v2`) pour comparer les tailles. Si vous les avez supprimées, reconstruisez au moins les V2.
+- TP 4 terminé : `registry:3` est déployé localement.
 - le plugin Buildx est installé. Il est fourni par défaut avec Docker Desktop. Si vous utilisez le client Docker installé par Homebrew sur macOS :
 
   ```bash
@@ -363,31 +364,16 @@ Le tag de version dit ce que l'équipe a voulu publier ; le tag `sha-...` dit ex
 
 ---
 
+## Étape 6 - Scannez les images multi-étapes
+
+On rescanne, on compare, les vulnérabilités code / images / secrets. 
+
+---
+
 ## Étape 5 - Ménage
 
 **Ce que vous devez faire :**
 
 - Faites le ménage : conteneurs, volume, registre, builder.
-
-**Question de réflexion :**
-
-- `docker images` affiche la taille **décompressée** de l'image. Ce qui transite sur le réseau lors d'un `pull` est-il plus gros ou plus petit ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
-{:/nomarkdown}
-
-```bash
-docker container rm -f ...
-docker image rm ...
-docker image prune -a
-docker buildx prune
-docker system df
-(docker system prune)
-```
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
 
 {% endraw %}

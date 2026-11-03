@@ -222,7 +222,7 @@ docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
     -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" config tp/tp3/back/multi.Dockerfile
+    "aquasec/trivy:0.76.1" config tp/tp3/back/v2.Dockerfile
 
 curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/v0.76.1/contrib/html.tpl
 
