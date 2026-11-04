@@ -1,6 +1,6 @@
 ---
 title: "TP 5 - Builds multi-étapes et multi-plateformes avec Buildx"
-objective: "Réécrire les images du TP 3 avec des builds multi-étapes et les caches BuildKit pour les réduire au strict nécessaire, puis les construire pour plusieurs architectures et les publier avec un schéma de tags versionné."
+objective: "Réécrire les images du TP 3 avec des builds multi-étapes pour les réduire au strict nécessaire, puis les construire pour plusieurs architectures et les publier avec un schéma de tags versionné."
 ---
 
 {% raw %}
@@ -211,7 +211,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 **Ce que vous devez faire :**
 
 - Avec l'option `--platform`, construisez le back pour `linux/amd64` et `linux/arm64`. Notez le temps de build.
-- Ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. Ajoutez dans l'étape `build` du back, juste après `FROM`, les lignes suivantes :
+- Ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. Ajoutez à la fin de l'étape `build` du back, **après** `mvn package`, les lignes suivantes :
 
   ```dockerfile
   ARG BUILDPLATFORM
@@ -219,7 +219,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
   RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
   ```
 
-- Reconstruisez les deux images (back et front) pour les deux plateformes avec `--progress=plain`. Comparez le temps de build du back et lisez les lignes produites par `echo`.
+- Reconstruisez les deux images (back et front) pour les deux plateformes avec `--progress=plain`. Comparez le temps de build du back, comptez combien de fois `mvn package` est exécuté et lisez les lignes produites par `echo`.
 - Affichez l'index des deux images avec `docker buildx imagetools inspect`. Combien d'entrées comptez-vous ? À quoi correspondent les entrées `unknown/unknown` ?
 - Lancez le front en forçant l'architecture qui **n'est pas** celle de votre machine, en lui faisant afficher `uname -m` au lieu de démarrer nginx.
 
@@ -228,6 +228,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 - Pourquoi l'étape finale peut-elle être produite pour une architecture étrangère sans émulation coûteuse, alors qu'elle est basée sur une image `arm64` ou `amd64` ?
 - Le jar du back embarque le driver SQLite, qui contient du code natif. Pourquoi fonctionne-t-il sur les deux architectures alors qu'il a été compilé une seule fois ?
 - Dans quel cas `--platform=$BUILDPLATFORM` ne suffirait-il pas ?
+- Pourquoi placer les `ARG` après `mvn package` et non juste après `FROM` ?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
@@ -242,14 +243,17 @@ time docker buildx build --platform linux/amd64,linux/arm64 \
 
 L'étape `build` est exécutée deux fois, dont une sous émulation : Maven tourne sur un processeur virtuel, et le build est nettement plus long.
 
-Début de l'étape `build` du back après modification :
+Étape `build` du back après modification :
 
 ```dockerfile
 FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn package -DskipTests
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
-WORKDIR /app
 ```
 
 Et pour le front : `FROM --platform=$BUILDPLATFORM node:22-alpine AS build`.
@@ -261,7 +265,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   -t localhost:5000/tp/front:test --push front/
 ```
 
-Les deux lignes `echo` affichent la même plateforme de construction (la vôtre) et les deux plateformes cibles : l'étape `build` tourne en natif pour chaque cible, et produit le même jar. Le build est presque aussi rapide qu'un build mono-plateforme.
+`mvn package` n'apparaît qu'**une fois** dans la sortie : pour les deux cibles, les instructions jusqu'à `mvn package` sont identiques (même image de base, mêmes commandes), et BuildKit ne les exécute qu'une fois, en natif. Seul l'`echo` est exécuté deux fois : ses deux lignes affichent la même plateforme de construction (la vôtre) et les deux plateformes cibles. Le build est presque aussi rapide qu'un build mono-plateforme.
+
+Un `ARG` déclaré dans une étape devient une variable d'environnement de **tous les `RUN` qui le suivent**. Placé juste après `FROM`, `ARG TARGETPLATFORM` donnerait à `mvn package` une valeur différente pour chaque cible : BuildKit ne pourrait plus partager l'étape et lancerait Maven deux fois (en natif, mais deux fois).
 
 ```bash
 docker buildx imagetools inspect localhost:5000/tp/back:test
@@ -277,7 +283,7 @@ docker run --rm --platform linux/arm64 localhost:5000/tp/front:test uname -m   #
 
 Le point d'entrée de nginx n'exécute ses scripts et nginx que si la commande est `nginx` ; sinon, il exécute la commande demandée. L'architecture étrangère tourne sous émulation, de façon transparente.
 
-L'étape finale ne contient aucun `RUN` : elle ne fait que **copier** des fichiers sur une image de base déjà construite pour la bonne architecture. Rien n'est exécuté, donc rien n'est émulé. C'est une raison de plus pour éviter les `RUN` dans l'étape finale.
+L'étape finale du front ne contient aucun `RUN` : elle ne fait que **copier** des fichiers sur une image de base déjà construite pour la bonne architecture. Rien n'est exécuté, donc rien n'est émulé. Celle du back contient trois `RUN` (`apk upgrade`, `addgroup`/`adduser`, `mkdir`/`chown`) : ils sont exécutés sous émulation pour l'architecture étrangère, mais ce sont des commandes courtes, sans commune mesure avec un build Maven. C'est une raison de plus pour limiter les `RUN` dans l'étape finale.
 
 Le driver SQLite (`sqlite-jdbc`) embarque ses bibliothèques natives pour toutes les plateformes courantes, et charge la bonne au démarrage. Le jar est donc réellement indépendant de l'architecture.
 
@@ -364,16 +370,87 @@ Le tag de version dit ce que l'équipe a voulu publier ; le tag `sha-...` dit ex
 
 ---
 
-## Étape 6 - Scannez les images multi-étapes
+## Étape 5 - Scanner l'image multi-étapes
 
-On rescanne, on compare, les vulnérabilités code / images / secrets. 
-
----
-
-## Étape 5 - Ménage
+Au TP 4, Trivy a scanné l'image du back construite en une seule étape : Ubuntu, JDK, Maven, le dépôt `~/.m2` et le jar. L'image multi-étapes ne garde qu'un JRE et le jar. Reste à mesurer ce que cela change pour la sécurité.
 
 **Ce que vous devez faire :**
 
-- Faites le ménage : conteneurs, volume, registre, builder.
+- Redéfinissez la fonction `trivy` du TP 4 si votre terminal ne la connaît plus.
+- Scannez `tp3-back:v2` (l'image complète du TP 4) et `localhost:5000/tp/back:2.0.0`, en vulnérabilités et en secrets. Relevez pour chacune le nombre de vulnérabilités par sévérité.
+- Refaites les deux scans en séparant les vulnérabilités des **paquets du système** (`--pkg-types os`) de celles des **bibliothèques applicatives** (`--pkg-types library`), et complétez le tableau :
+
+  | | `tp3-back:v2` | `tp/back:2.0.0` |
+  | --- | --- | --- |
+  | Taille | | |
+  | Vulnérabilités système (`os`) | | |
+  | Vulnérabilités bibliothèques (`library`) | | |
+  | Secrets | | |
+
+- Pour les vulnérabilités `library`, comparez la colonne des chemins (`--format json` ou rapport HTML) : quels fichiers sont signalés dans l'image complète et ont disparu de l'image multi-étapes ?
+- Générez le rapport HTML des deux images, comme au TP 4.
+
+**Questions de réflexion :**
+
+- Quelles vulnérabilités ont disparu ? Lesquelles restent, et pourquoi le build multi-étapes ne peut-il rien pour elles ?
+- Une vulnérabilité dans Maven ou dans le JDK est-elle exploitable dans l'image complète, alors que l'application ne les utilise pas pour s'exécuter ? Pourquoi faut-il quand même les retirer ?
+- Que faudrait-il faire pour réduire encore le nombre de vulnérabilités restantes ?
+
+{::nomarkdown}
+<details><summary>Solution - Étape 5</summary>
+{:/nomarkdown}
+
+```bash
+trivy() {
+  docker run --rm \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v trivy-cache:/root/.cache \
+    -v "$PWD":/work -w /work \
+    "aquasec/trivy:0.76.1" "$@"
+}
+
+for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
+  trivy image --scanners vuln,secret "$image"
+done
+
+for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
+  for type in os library; do
+    echo "== $image - $type"
+    trivy image --quiet --scanners vuln --pkg-types "$type" "$image" | grep '^Total'
+  done
+done
+
+trivy image --quiet --scanners vuln --pkg-types library --format json tp3-back:v2 \
+  | jq -r '.Results[].Target' | sort -u
+
+for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
+  trivy image --format template --template "@/work/html.tpl" \
+    -o "report-$(echo "$image" | tr '/:' '--').html" "$image"
+done
+```
+
+Les chiffres exacts dépendent de la date du scan, mais la tendance est nette :
+
+- **paquets du système** : l'image complète embarque Ubuntu et tous les paquets tirés par `openjdk-21-jdk-headless` et `maven`. L'image multi-étapes ne contient qu'Alpine et le JRE, mis à jour par `apk upgrade` : il ne reste que peu de vulnérabilités, souvent aucune critique ;
+- **bibliothèques** : dans l'image complète, Trivy analyse aussi les jars de Maven (`/usr/share/maven/lib`) et tout le dépôt `/root/.m2` (plugins et dépendances de build). Ces cibles disparaissent : il ne reste que `/app/app.jar` et les bibliothèques qu'il embarque ;
+- **secrets** : seuls les fichiers de l'image finale sont scannés. Un secret utilisé dans l'étape `build` n'apparaît pas dans l'image finale, à condition de ne pas l'avoir copié avec `COPY --from` (et il reste visible dans le cache de build : pour un secret de build, on utilise `RUN --mount=type=secret`).
+
+Les vulnérabilités du jar applicatif sont **identiques** dans les deux images : le build multi-étapes retire les outils de construction, pas les dépendances de l'application. Pour les corriger, il faut monter leur version dans `pom.xml` et reconstruire.
+
+Une vulnérabilité dans Maven ou `javac` n'est pas appelée par l'application, mais un attaquant qui obtient un accès au conteneur peut s'en servir, et chaque outil présent élargit ce qu'il peut faire. Surtout, ces alertes noient les vulnérabilités réellement importantes : un rapport court est un rapport lu.
+
+Pour aller plus loin : une image de base plus petite (`gcr.io/distroless/java21-debian12`, sans shell ni gestionnaire de paquets), un JRE réduit aux seuls modules nécessaires avec `jlink`, et une reconstruction régulière pour profiter des correctifs des images de base.
+
+{::nomarkdown}
+</details>
+{:/nomarkdown}
+
+---
+
+## Étape 6 - Ménage
+
+**Ce que vous devez faire :**
+
+- Faites le ménage : conteneurs, volume, builder.
 
 {% endraw %}
