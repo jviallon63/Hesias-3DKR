@@ -15,12 +15,7 @@ Pour l'occasion, le back abandonne SQLite pour **PostgreSQL**, avec l'image offi
 
 **Prérequis :**
 
-- TP 4 terminé : le dépôt est dans `~/tp3`, avec les Dockerfiles multi-étapes du back et du front et leurs fichiers annexes.
-- Le builder actif est `default` (`docker buildx use default`).
-
-```bash
-cd ~/tp3
-```
+- TP 5 terminé, avec les Dockerfiles multi-étapes du back et du front et leurs fichiers annexes.
 
 > Compose v2 s'utilise avec `docker compose` (avec une espace). L'ancien `docker-compose` (avec un tiret), écrit en Python, n'est plus maintenu.
 
@@ -410,80 +405,7 @@ Le back est aussi sur `frontend`, un réseau classique : c'est par lui que passe
 
 ---
 
-## Étape 5 - Volumes et montages : initialiser la base
-
-L'image `postgres` exécute, **au premier démarrage uniquement**, les scripts `.sql` et `.sh` présents dans `/docker-entrypoint-initdb.d/`. On s'en sert pour préparer la base : rôles, extensions, schémas.
-
-**Ce que vous devez faire :**
-
-- Créez `~/tp3/db/init/01-lecteur.sql`, qui crée un rôle `lecteur` en lecture seule, capable de lire les tables que le back créera plus tard :
-
-  ```sql
-  CREATE ROLE lecteur LOGIN PASSWORD 'lecteur';
-  GRANT CONNECT ON DATABASE app TO lecteur;
-  GRANT USAGE ON SCHEMA public TO lecteur;
-  ALTER DEFAULT PRIVILEGES FOR ROLE app IN SCHEMA public GRANT SELECT ON TABLES TO lecteur;
-  ```
-
-- Montez le dossier `db/init` dans `/docker-entrypoint-initdb.d`, en lecture seule.
-- Relancez avec `docker compose up -d`. Le rôle `lecteur` existe-t-il ? Lisez les logs de `db`.
-- Trouvez comment faire exécuter le script, puis vérifiez que `lecteur` peut lire les tables du back, mais pas y écrire.
-- Changez `POSTGRES_PASSWORD` dans `.env` sans supprimer le volume, et relancez. Que devient le back ?
-
-**Questions de réflexion :**
-
-- Pourquoi le script ne s'est-il pas exécuté au premier essai ?
-- Quel problème pose le mot de passe écrit dans `01-lecteur.sql` ?
-
-{::nomarkdown}
-<details><summary>Solution - Étape 5</summary>
-{:/nomarkdown}
-
-```yaml
-  db:
-    # ...
-    volumes:
-      - db-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
-```
-
-Les chemins relatifs d'un montage sont résolus par rapport au dossier du fichier Compose.
-
-```bash
-docker compose up -d
-docker compose exec db psql -U app -d app -c '\du'    # pas de rôle lecteur
-docker compose logs db | grep -i "skipping initialization"
-```
-
-Le volume `db-data` contient déjà une base : l'image ignore alors `/docker-entrypoint-initdb.d`, ainsi que `POSTGRES_USER` et `POSTGRES_PASSWORD`. Il faut repartir d'un volume vide :
-
-```bash
-docker compose down -v
-docker compose up -d
-docker compose logs db | grep 01-lecteur.sql
-```
-
-Après avoir créé des données dans l'application (le back crée les tables à son démarrage) :
-
-```bash
-docker compose exec db psql -U lecteur -d app -c '\dt'
-docker compose exec db psql -U lecteur -d app -c 'SELECT count(*) FROM <une table listée>'
-docker compose exec db psql -U lecteur -d app -c 'DELETE FROM <une table listée>'   # permission denied
-```
-
-Les connexions locales à l'intérieur du conteneur ne demandent pas de mot de passe (méthode `trust` sur le socket Unix, configurée par l'image). Les connexions réseau, comme celle du back, en exigent un.
-
-Changer `POSTGRES_PASSWORD` sur une base existante ne change **pas** le mot de passe de l'utilisateur `app`, défini une fois pour toutes à l'initialisation. Le back, lui, reçoit le nouveau mot de passe : ses logs affichent `password authentication failed for user "app"`, et il s'arrête. Il faut changer le mot de passe dans la base (`ALTER ROLE app PASSWORD '...'`), ou repartir d'un volume vide en développement. Remettez l'ancien mot de passe avant de continuer.
-
-Le mot de passe de `lecteur` est en clair dans un fichier versionné, comme le `admin123` du TP 3. Un script `.sh` d'initialisation pourrait le lire depuis une variable d'environnement ou un secret.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 6 - Exploiter la pile
+## Étape 5 - Exploiter la pile
 
 **Ce que vous devez faire :**
 
@@ -503,7 +425,7 @@ Le mot de passe de `lecteur` est en clair dans un fichier versionné, comme le `
 - Pourquoi `docker compose up -d` ne recrée-t-il pas tous les conteneurs à chaque fois ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 6</summary>
+<details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
 
 ```bash
@@ -547,7 +469,7 @@ Compose calcule une empreinte de la configuration de chaque service et la compar
 
 ---
 
-## Étape 7 - Profils : des outils à la demande
+## Étape 6 - Profils : des outils à la demande
 
 Certains services ne servent qu'occasionnellement : outils d'administration, jeux de données de test, outils de débogage. Un **profil** les exclut du démarrage par défaut.
 
@@ -567,7 +489,7 @@ Certains services ne servent qu'occasionnellement : outils d'administration, jeu
 - Pourquoi `adminer` doit-il être relié à deux réseaux ?
 
 {::nomarkdown}
-<details><summary>Solution - Étape 7</summary>
+<details><summary>Solution - Étape 6</summary>
 {:/nomarkdown}
 
 ```yaml
@@ -594,38 +516,6 @@ docker compose --profile tools down
 Sans profil actif, les services profilés sont ignorés. On active un profil avec `--profile` ou la variable `COMPOSE_PROFILES=tools`. Selon la version de Compose, un `down` sans le profil peut laisser `adminer` tourner, et le réseau qu'il utilise avec lui : précisez le profil pour arrêter aussi ses services.
 
 `adminer` doit joindre `db`, uniquement présente sur `backend`, et être publié sur l'hôte, ce qui est impossible depuis un réseau interne seul : il lui faut aussi `frontend`. Le port n'est publié que sur `127.0.0.1` : un outil d'administration n'a pas à être exposé sur le réseau local.
-
-{::nomarkdown}
-</details>
-{:/nomarkdown}
-
----
-
-## Étape 8 - Ménage
-
-**Ce que vous devez faire :**
-
-- Arrêtez et supprimez toute la pile, profils compris, avec ses volumes.
-- Supprimez les images construites par Compose.
-- Vérifiez qu'il ne reste ni conteneur, ni réseau, ni volume du projet `tp`.
-
-{::nomarkdown}
-<details><summary>Solution - Étape 8</summary>
-{:/nomarkdown}
-
-```bash
-docker compose --profile tools down -v --rmi all
-docker ps -a --filter name=tp-
-docker network ls --filter name=tp_
-docker volume ls --filter name=tp_
-```
-
-`--rmi local` ne supprime que les images **sans nom personnalisé**. Les images du back et du front ont un nom défini par `image:` (`tp/back:2.0.0`) : il faut `--rmi all`, qui supprime aussi les images téléchargées (`postgres`, `adminer`).
-
-> **Pour aller plus loin.**
->
-> - `compose.override.yaml` est fusionné automatiquement avec `compose.yaml` : on y place les réglages de développement (ports de débogage, outils) sans toucher au fichier principal. `-f` permet de combiner explicitement plusieurs fichiers, par exemple `-f compose.yaml -f compose.prod.yaml`.
-> - `docker compose watch` surveille les sources et resynchronise ou reconstruit les services à chaque modification, selon une section `develop.watch` du fichier Compose.
 
 {::nomarkdown}
 </details>
@@ -701,22 +591,5 @@ networks:
 volumes:
   db-data:
 ```
-
-## Récapitulatif des commandes
-
-| Commande | Rôle |
-| --- | --- |
-| `docker compose up -d` | Construire si besoin, créer et démarrer la pile en arrière-plan |
-| `docker compose up -d --build <service>` | Reconstruire l'image d'un service et le recréer |
-| `docker compose down [-v] [--rmi all]` | Supprimer conteneurs et réseaux (et volumes, et images) |
-| `docker compose ps [--services]` | Lister les services et leur état |
-| `docker compose logs [-f] [--tail N] [-t] [service]` | Lire les logs |
-| `docker compose exec <service> <cmd>` | Exécuter une commande dans un conteneur existant |
-| `docker compose run --rm <service> <cmd>` | Lancer un conteneur ponctuel à partir d'un service |
-| `docker compose stop` / `start` / `restart <service>` | Piloter un service sans le recréer |
-| `docker compose top` / `port` | Processus d'un service, port publié |
-| `docker compose config` | Afficher la configuration calculée (attention aux secrets) |
-| `docker compose build` / `pull` | Construire ou télécharger les images |
-| `docker compose --profile <nom> ...` | Inclure les services d'un profil |
 
 {% endraw %}
