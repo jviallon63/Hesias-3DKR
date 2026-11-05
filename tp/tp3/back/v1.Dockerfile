@@ -4,7 +4,7 @@ RUN apt-get update
 RUN apt-get install -y openjdk-21-jdk-headless maven
 
 WORKDIR /app
-COPY ./app .
+COPY . .
 RUN mvn package -DskipTests
 
 RUN mkdir -p /data

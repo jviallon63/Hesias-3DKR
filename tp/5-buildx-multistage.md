@@ -210,25 +210,21 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 
 **Ce que vous devez faire :**
 
+- Pour mesurer précisément les temps d'exécution, videz le cache de Buildx avec la commande `docker buildx prune -a`.
 - Avec l'option `--platform`, construisez le back pour `linux/amd64` et `linux/arm64`. Notez le temps de build.
-- Ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. Ajoutez à la fin de l'étape `build` du back, **après** `mvn package`, les lignes suivantes :
+- Videz le cache de Buildx de nouveau !
+- Dans le Dockerfile, ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. 
 
-  ```dockerfile
-  ARG BUILDPLATFORM
-  ARG TARGETPLATFORM
-  RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
-  ```
-
-- Reconstruisez les deux images (back et front) pour les deux plateformes avec `--progress=plain`. Comparez le temps de build du back, comptez combien de fois `mvn package` est exécuté et lisez les lignes produites par `echo`.
-- Affichez l'index des deux images avec `docker buildx imagetools inspect`. Combien d'entrées comptez-vous ? À quoi correspondent les entrées `unknown/unknown` ?
-- Lancez le front en forçant l'architecture qui **n'est pas** celle de votre machine, en lui faisant afficher `uname -m` au lieu de démarrer nginx.
+- Démarrer la registry du TP4 (avec l'UI si possible).
+- Poussez la dernière image du back avec le multi-arch sur la registry.
+- Affichez l'index des deux images avec `docker buildx imagetools inspect <votre_image>`. Combien d'entrées comptez-vous ?
+- Comparez avec une image du TP3.
 
 **Questions de réflexion :**
 
-- Pourquoi l'étape finale peut-elle être produite pour une architecture étrangère sans émulation coûteuse, alors qu'elle est basée sur une image `arm64` ou `amd64` ?
-- Le jar du back embarque le driver SQLite, qui contient du code natif. Pourquoi fonctionne-t-il sur les deux architectures alors qu'il a été compilé une seule fois ?
-- Dans quel cas `--platform=$BUILDPLATFORM` ne suffirait-il pas ?
-- Pourquoi placer les `ARG` après `mvn package` et non juste après `FROM` ?
+- Pourquoi le second build est plus rapide (presque divisé par 2) ?
+- Dans quel cas `--platform=linux/amd64,linux/arm64` ne suffirait-il pas sur la commande de build ?
+- Quelle différence entre `docker image inspect` et `docker buildx imagetools inspect`?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
@@ -238,56 +234,48 @@ Premier build, sans `$BUILDPLATFORM` :
 
 ```bash
 time docker buildx build --platform linux/amd64,linux/arm64 \
-  -t localhost:5000/tp/back:test --push back/
+  -t localhost:5000/sample-app/back:1.0.0 back/
 ```
-
 L'étape `build` est exécutée deux fois, dont une sous émulation : Maven tourne sur un processeur virtuel, et le build est nettement plus long.
 
 Étape `build` du back après modification :
 
 ```dockerfile
 FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-21 AS build
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn package -DskipTests
-ARG BUILDPLATFORM
-ARG TARGETPLATFORM
-RUN echo "Construit sur $BUILDPLATFORM pour $TARGETPLATFORM"
+...
 ```
-
-Et pour le front : `FROM --platform=$BUILDPLATFORM node:22-alpine AS build`.
 
 ```bash
-time docker buildx build --progress=plain --platform linux/amd64,linux/arm64 \
-  -t localhost:5000/tp/back:test --push back/
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t localhost:5000/tp/front:test --push front/
+time docker buildx build --platform linux/amd64,linux/arm64 \
+  -t localhost:5000/sample-app/back:1.0.0 back/
 ```
 
-`mvn package` n'apparaît qu'**une fois** dans la sortie : pour les deux cibles, les instructions jusqu'à `mvn package` sont identiques (même image de base, mêmes commandes), et BuildKit ne les exécute qu'une fois, en natif. Seul l'`echo` est exécuté deux fois : ses deux lignes affichent la même plateforme de construction (la vôtre) et les deux plateformes cibles. Le build est presque aussi rapide qu'un build mono-plateforme.
+L'étape `build` n'est exécutée qu'un fois, avec l'architecture de l'hôte. La secondes étape créé les 2 images en récupérant le jar qui n'est pas dépendant de l'architecture. Avec Go par exemple le build devra être fait 2 fois car le binaire compilé par Go est lié à l'architecture.
 
-Un `ARG` déclaré dans une étape devient une variable d'environnement de **tous les `RUN` qui le suivent**. Placé juste après `FROM`, `ARG TARGETPLATFORM` donnerait à `mvn package` une valeur différente pour chaque cible : BuildKit ne pourrait plus partager l'étape et lancerait Maven deux fois (en natif, mais deux fois).
+```dockerfile
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build
+```
 
 ```bash
-docker buildx imagetools inspect localhost:5000/tp/back:test
-docker buildx imagetools inspect localhost:5000/tp/front:test
+docker buildx imagetools inspect localhost:5000/sample-app/back:1.0.0
+docker buildx imagetools inspect localhost:5000/sample-app/back:0.0.0
 ```
 
-L'index contient une entrée par plateforme, plus une entrée `unknown/unknown` par plateforme : ce sont des **attestations de provenance**, ajoutées par défaut par Buildx. Elles décrivent comment l'image a été construite (Dockerfile, images de base, paramètres) et servent à vérifier la chaîne d'approvisionnement. `--provenance=false` les désactive, `--sbom=true` ajoute en plus l'inventaire des paquets de l'image (SBOM).
+L'index contient une entrée par plateforme, plus une entrée `unknown/unknown` par plateforme : ce sont des **attestations de provenance**, ajoutées par défaut par Buildx. Elles décrivent comment l'image a été construite (Dockerfile, images de base, paramètres) et servent à vérifier la chaîne d'approvisionnement. `--provenance=false` les désactive.
+
+- `docker image inspect <image>` examine une image présente dans le stockage local de Docker. Il affiche ses détails de configuration, comme l’architecture, les variables d’environnement et la commande de démarrage.
+- `docker buildx imagetools inspect <image>` consulte *l'index* de l’image dans un registre et affiche ses manifestes.
 
 ```bash
-docker run --rm --platform linux/amd64 localhost:5000/tp/front:test uname -m   # x86_64
-docker run --rm --platform linux/arm64 localhost:5000/tp/front:test uname -m   # aarch64
+docker pull localhost:5001/sample-app/back:1.0.0@sha256:f3c586170991eb9cf6e7bff593d1eb70a28ce79691877747631d22fcd1874aab
+docker image inspect localhost:5001/sample-app/back:1.0.0@sha256:f3c586170991eb9cf6e7bff593d1eb70a28ce79691877747631d22fcd1874aab
+
+docker container run --rm -d --name back_amd -p 8089:8080 localhost:5001/sample-app/back:1.0.0@sha256:f3c586170991eb9cf6e7bff593d1eb70a28ce79691877747631d22fcd1874aab
+docker exec -it back_amd uname -a 
+
+docker container run --rm -d --name back -p 8088:8080 localhost:5001/sample-app/back:1.0.0
+docker exec -it back uname -a 
 ```
-
-Le point d'entrée de nginx n'exécute ses scripts et nginx que si la commande est `nginx` ; sinon, il exécute la commande demandée. L'architecture étrangère tourne sous émulation, de façon transparente.
-
-L'étape finale du front ne contient aucun `RUN` : elle ne fait que **copier** des fichiers sur une image de base déjà construite pour la bonne architecture. Rien n'est exécuté, donc rien n'est émulé. Celle du back contient trois `RUN` (`apk upgrade`, `addgroup`/`adduser`, `mkdir`/`chown`) : ils sont exécutés sous émulation pour l'architecture étrangère, mais ce sont des commandes courtes, sans commune mesure avec un build Maven. C'est une raison de plus pour limiter les `RUN` dans l'étape finale.
-
-Le driver SQLite (`sqlite-jdbc`) embarque ses bibliothèques natives pour toutes les plateformes courantes, et charge la bonne au démarrage. Le jar est donc réellement indépendant de l'architecture.
-
-`--platform=$BUILDPLATFORM` ne suffit plus quand le build produit du **code natif** : un binaire Go, Rust ou C compilé pour la machine de build ne tournerait pas sur l'autre architecture. Il faut alors faire de la **compilation croisée**, en passant `TARGETOS` et `TARGETARCH` au compilateur (par exemple `GOOS=$TARGETOS GOARCH=$TARGETARCH go build`).
 
 {::nomarkdown}
 </details>

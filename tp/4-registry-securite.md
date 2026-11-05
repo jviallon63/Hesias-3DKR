@@ -56,7 +56,7 @@ docker run --rm httpd:2 htpasswd -Bbn etudiant tp4-Registre > auth/htpasswd
 cat auth/htpasswd       # etudiant:$2y$05$...
 
 docker volume create registry-data
-docker container run --name registry -d -p 5001:5000 -v registry-data:/var/lib/registry -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM="Registre local" -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd -v ./tp/tp4/auth:/auth registry:3 # Port 5001 sur Mac car 5000 déjà occupé.
+docker container run --name registry -d -p 5001:5000 -v registry-data:/var/lib/registry -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM="Registre local" -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd -v ./tp4/auth:/auth registry:3 # Port 5001 sur Mac car 5000 déjà occupé.
 
 curl http://localhost:5001/v2/                                      # 401 Unauthorized
 curl -u etudiant:tp4-Registre http://localhost:5001/v2/             # {}
@@ -84,7 +84,7 @@ docker container run -d --name registry-ui \
 
 ## Étape 2 - `docker login`, `push` et `pull`
 
-Le nom d'une image indique **où** la pousser : `localhost:5000/sample-app/back:1.0.0` désigne le dépôt `sample-app/back` du registre `localhost:5000`. Sans registre dans le nom, c'est Docker Hub.
+Le nom d'une image indique **où** la pousser : `localhost:5000/sample-app/back:0.0.0` désigne le dépôt `sample-app/back` du registre `localhost:5000`. Sans registre dans le nom, c'est Docker Hub.
 
 **Ce que vous devez faire :**
 
@@ -108,13 +108,13 @@ Le nom d'une image indique **où** la pousser : `localhost:5000/sample-app/back:
 docker login localhost:5000 -u etudiant     # mot de passe demandé
 cat ~/.docker/config.json
 
-docker tag tp4-back:1.0.0 localhost:5000/sample-app/back:1.0.0
-docker push localhost:5000/sample-app/back:1.0.0
+docker tag tp4-back:0.0.0 localhost:5000/sample-app/back:0.0.0
+docker push localhost:5000/sample-app/back:0.0.0
 
-docker image rm tp4-back:1.0.0
-docker image rm localhost:5000/sample-app/back:1.0.0
+docker image rm tp4-back:0.0.0
+docker image rm localhost:5000/sample-app/back:0.0.0
 
-docker localhost:5000/sample-app/back:1.0.0
+docker localhost:5000/sample-app/back:0.0.0
 
 curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog
 curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
@@ -128,7 +128,7 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 
 ## Étape 3 - Publier en gérant les versions
 
-On reprend le schéma du TP 4 : un tag immuable par version (`1.0.0`), des tags mobiles (`1.0`, `1`, `latest`) déplacés à chaque publication.
+On reprend le schéma du TP 4 : un tag immuable par version (`0.0.0`), des tags mobiles (`1.0`, `1`, `latest`) déplacés à chaque publication.
 
 **Ce que vous devez faire :**
 
@@ -144,8 +144,8 @@ On reprend le schéma du TP 4 : un tag immuable par version (`1.0.0`), des tags 
 {:/nomarkdown}
 
 ```bash
-docker tag localhost:5001/sample-app/back:1.0.0 localhost:5001/sample-app/back:latest
-docker tag localhost:5001/sample-app/back:1.0.0 localhost:5001/sample-app/back:1.0
+docker tag localhost:5001/sample-app/back:0.0.0 localhost:5001/sample-app/back:latest
+docker tag localhost:5001/sample-app/back:0.0.0 localhost:5001/sample-app/back:0.0
 docker push --all-tags localhost:5001/sample-app/back
 
 curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
@@ -210,13 +210,13 @@ docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
     -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" image localhost:5001/sample-app/back:1.0.0
+    "aquasec/trivy:0.76.1" image localhost:5001/sample-app/back:0.0.0
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
     -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" image --severity CRITICAL localhost:5001/sample-app/back:1.0.0
+    "aquasec/trivy:0.76.1" image --severity CRITICAL localhost:5001/sample-app/back:0.0.0
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -234,7 +234,7 @@ docker run --rm \
     --format template \
     --template "@/work/html.tpl" \
     -o report.html \
-    localhost:5001/sample-app/back:1.0.0
+    localhost:5001/sample-app/back:0.0.0
 ```
 
 Le rapport se découpe en sections :

@@ -8,8 +8,8 @@ RUN addgroup --system app && adduser --system --ingroup app app
 
 WORKDIR /app
 
-COPY ./app/pom.xml .
-COPY ./app/src ./src
+COPY ./pom.xml .
+COPY ./src ./src
 RUN mvn package -DskipTests \
  && cp target/openapi-workshop-*.jar /app/app.jar \
  && rm -rf target

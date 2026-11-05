@@ -6,7 +6,7 @@ WORKDIR /app
 RUN chown node:node /app
 USER node
 
-COPY --chown=node:node ./app .
+COPY --chown=node:node . .
 RUN npm ci && npm cache clean --force
 RUN npx ng build && rm -rf .angular
 RUN chmod +x /app/docker-entrypoint.sh
