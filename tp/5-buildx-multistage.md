@@ -283,74 +283,31 @@ docker exec -it back uname -a
 
 ---
 
-## Étape 4 - Nouveaux tags pour les builds
+## Étape 4 - Build & push : tout-en-un
 
-Au TP 3, les images s'appelaient `tp3-back:v2` : un nom local, une étiquette informelle. Une image destinée à être déployée doit avoir un nom complet (registre, espace, nom) et des tags qui disent **quelle version** et **quel code** elle contient.
-
-Schéma adopté pour la suite :
-
-| Tag | Exemple | Rôle |
-| --- | --- | --- |
-| Version complète | `2.0.0` | Immuable : identifie exactement une version publiée |
-| Version mineure | `2.0` | Mobile : dernière version corrective de la 2.0 |
-| Version majeure | `2` | Mobile : dernière version de la 2 |
-| `latest` | `latest` | Mobile : dernière version publiée |
-| Révision Git | `sha-1a2b3c4` | Immuable : relie l'image au commit qui l'a produite |
+Nous disposons maintenant d'une image multi-plateforme à publier dans la registry sous trois tags : `1.0.1`, `1.0` et `latest`. Les tags de version permettent d'identifier les versions publiées, tandis que `latest` est un tag mobile. La construction de l'image, l'ajout de ses tags et sa publication peuvent nécessiter plusieurs commandes, mais Buildx permet de regrouper ces opérations en une seule.
 
 **Ce que vous devez faire :**
 
-- Récupérez la version courte du dernier commit du dépôt dans une variable `VCS_REF`, et définissez `VERSION=2.0.0`.
-- Construisez et poussez le back et le front pour les deux plateformes sous `localhost:5000/tp/back` et `localhost:5000/tp/front`, avec les cinq tags du tableau en une seule commande chacun, en injectant `APP_VERSION` et `VCS_REF`.
-- Listez les tags présents dans le registre grâce à son API (`/v2/<nom>/tags/list`).
-- Téléchargez `localhost:5000/tp/back:2.0.0` et vérifiez ses labels.
-
-**Questions de réflexion :**
-
-- Pourquoi un tag `sha-...` en plus du tag de version ?
+- Construisez et publiez l'image du back pour les architectures `amd64` et `arm64` dans la registry `localhost:5000`, sous les tags `1.0.1`, `1.0` et `latest`, à l'aide d'une seule commande `docker buildx build`.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
 
 ```bash
-VERSION=2.0.0
-VCS_REF=$(git rev-parse --short HEAD)
-REGISTRY=localhost:5000/tp
-
-for app in back front; do
-  docker buildx build --platform linux/amd64,linux/arm64 \
-    --build-arg APP_VERSION="$VERSION" \
-    --build-arg VCS_REF="$VCS_REF" \
-    -t "$REGISTRY/$app:$VERSION" \
-    -t "$REGISTRY/$app:${VERSION%.*}" \
-    -t "$REGISTRY/$app:${VERSION%%.*}" \
-    -t "$REGISTRY/$app:latest" \
-    -t "$REGISTRY/$app:sha-$VCS_REF" \
-    --push "$app/"
-done
+VERSION="1.0.1"
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t "localhost:5000/sample-app/back:${VERSION}" \
+  -t "localhost:5000/sample-app/back:${VERSION%.*}" \
+  -t "localhost:5000/sample-app/back:latest" \
+  --push \
+  sample-app/back
 ```
-
-`${VERSION%.*}` retire le dernier composant (`2.0`), `${VERSION%%.*}` ne garde que le premier (`2`). Les deux plateformes sont construites une seule fois, et les cinq tags pointent vers le même index.
 
 ```bash
-curl http://localhost:5000/v2/tp/back/tags/list
-curl http://localhost:5000/v2/tp/front/tags/list
-
-docker pull localhost:5000/tp/back:2.0.0
-docker image inspect -f '{{json .Config.Labels}}' localhost:5000/tp/back:2.0.0
+curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 ```
-
-`docker pull` récupère automatiquement la variante de votre architecture dans l'index.
-
-Ruptures de compatibilité par rapport au TP 3 :
-
-- le front écoute désormais sur le port **8080** au lieu de 4200 : toute commande `docker run -p 4200:4200` ou tout fichier de déploiement existant ne fonctionne plus ;
-- le back tourne avec l'utilisateur `nonroot` (UID **65532**) au lieu de `ubuntu` (UID 1000) : un volume créé par les images du TP 3 appartient à l'UID 1000, et le nouveau back ne peut plus y écrire sa base ;
-- le back n'a plus de shell : les scripts d'exploitation qui faisaient `docker exec ... sh` échouent.
-
-En versionnage sémantique, c'est une nouvelle version **majeure**.
-
-Le tag de version dit ce que l'équipe a voulu publier ; le tag `sha-...` dit exactement quel code a été construit. En cas d'incident, il permet de retrouver le commit, et donc le diff, sans ambiguïté. Le label `org.opencontainers.image.revision` porte la même information dans l'image elle-même.
 
 {::nomarkdown}
 </details>
@@ -364,25 +321,8 @@ Au TP 4, Trivy a scanné l'image du back construite en une seule étape : Ubuntu
 
 **Ce que vous devez faire :**
 
-- Redéfinissez la fonction `trivy` du TP 4 si votre terminal ne la connaît plus.
-- Scannez `tp3-back:v2` (l'image complète du TP 4) et `localhost:5000/tp/back:2.0.0`, en vulnérabilités et en secrets. Relevez pour chacune le nombre de vulnérabilités par sévérité.
-- Refaites les deux scans en séparant les vulnérabilités des **paquets du système** (`--pkg-types os`) de celles des **bibliothèques applicatives** (`--pkg-types library`), et complétez le tableau :
-
-  | | `tp3-back:v2` | `tp/back:2.0.0` |
-  | --- | --- | --- |
-  | Taille | | |
-  | Vulnérabilités système (`os`) | | |
-  | Vulnérabilités bibliothèques (`library`) | | |
-  | Secrets | | |
-
-- Pour les vulnérabilités `library`, comparez la colonne des chemins (`--format json` ou rapport HTML) : quels fichiers sont signalés dans l'image complète et ont disparu de l'image multi-étapes ?
-- Générez le rapport HTML des deux images, comme au TP 4.
-
-**Questions de réflexion :**
-
-- Quelles vulnérabilités ont disparu ? Lesquelles restent, et pourquoi le build multi-étapes ne peut-il rien pour elles ?
-- Une vulnérabilité dans Maven ou dans le JDK est-elle exploitable dans l'image complète, alors que l'application ne les utilise pas pour s'exécuter ? Pourquoi faut-il quand même les retirer ?
-- Que faudrait-il faire pour réduire encore le nombre de vulnérabilités restantes ?
+- Scannez `back:0.0.0` (l'image complète du TP 4) et `back:1.0.0` (l'image construite dans ce TP).
+- Refaites les deux scans en séparant les vulnérabilités des **paquets du système** (`--pkg-types os`) de celles des **bibliothèques applicatives** (`--pkg-types library`).
 
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
@@ -397,37 +337,19 @@ trivy() {
     "aquasec/trivy:0.76.1" "$@"
 }
 
-for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
-  trivy image --scanners vuln,secret "$image"
-done
+trivy image --format template --template "@/work/html.tpl" -o report_0.0.0.html localhost:5001/sample-app/back:0.0.0
+trivy image --format template --template "@/work/html.tpl" -o report_1.0.0.html localhost:5001/sample-app/back:1.0.0
 
-for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
-  for type in os library; do
-    echo "== $image - $type"
-    trivy image --quiet --scanners vuln --pkg-types "$type" "$image" | grep '^Total'
-  done
-done
-
-trivy image --quiet --scanners vuln --pkg-types library --format json tp3-back:v2 \
-  | jq -r '.Results[].Target' | sort -u
-
-for image in tp3-back:v2 localhost:5000/tp/back:2.0.0; do
-  trivy image --format template --template "@/work/html.tpl" \
-    -o "report-$(echo "$image" | tr '/:' '--').html" "$image"
-done
+trivy image --format template --template "@/work/html.tpl" -o report_1.0.0.html --pkg-types os localhost:5001/sample-app/back:1.0.0
+trivy image --format template --template "@/work/html.tpl" -o report_1.0.0.html --pkg-types library localhost:5001/sample-app/back:1.0.0
 ```
 
 Les chiffres exacts dépendent de la date du scan, mais la tendance est nette :
 
 - **paquets du système** : l'image complète embarque Ubuntu et tous les paquets tirés par `openjdk-21-jdk-headless` et `maven`. L'image multi-étapes ne contient qu'Alpine et le JRE, mis à jour par `apk upgrade` : il ne reste que peu de vulnérabilités, souvent aucune critique ;
 - **bibliothèques** : dans l'image complète, Trivy analyse aussi les jars de Maven (`/usr/share/maven/lib`) et tout le dépôt `/root/.m2` (plugins et dépendances de build). Ces cibles disparaissent : il ne reste que `/app/app.jar` et les bibliothèques qu'il embarque ;
-- **secrets** : seuls les fichiers de l'image finale sont scannés. Un secret utilisé dans l'étape `build` n'apparaît pas dans l'image finale, à condition de ne pas l'avoir copié avec `COPY --from` (et il reste visible dans le cache de build : pour un secret de build, on utilise `RUN --mount=type=secret`).
 
-Les vulnérabilités du jar applicatif sont **identiques** dans les deux images : le build multi-étapes retire les outils de construction, pas les dépendances de l'application. Pour les corriger, il faut monter leur version dans `pom.xml` et reconstruire.
-
-Une vulnérabilité dans Maven ou `javac` n'est pas appelée par l'application, mais un attaquant qui obtient un accès au conteneur peut s'en servir, et chaque outil présent élargit ce qu'il peut faire. Surtout, ces alertes noient les vulnérabilités réellement importantes : un rapport court est un rapport lu.
-
-Pour aller plus loin : une image de base plus petite (`gcr.io/distroless/java21-debian12`, sans shell ni gestionnaire de paquets), un JRE réduit aux seuls modules nécessaires avec `jlink`, et une reconstruction régulière pour profiter des correctifs des images de base.
+Less vulnérabilités du jar applicatif sont **identiques** dans les deux images : le build multi-étapes retire les outils de construction, pas les dépendances de l'application. Pour les corriger, il faut monter leur version dans `pom.xml` et reconstruire.
 
 {::nomarkdown}
 </details>
