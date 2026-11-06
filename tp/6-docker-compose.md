@@ -41,35 +41,24 @@ Pour l'occasion, le back abandonne SQLite pour **PostgreSQL**, avec l'image offi
 Rappel des commandes de lancement du TP 4 :
 
 ```bash
-docker run -d --name back -p 8081:8081 -v tp4-data:/data localhost:5000/tp/back:2.0.0
-docker run -d --name front -p 4200:8080 localhost:5000/tp/front:2.0.0
+docker container run -d --name back -p 8080:8080 tp5-back:1.0.0
+docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 ```
-
-Un fichier Compose a trois sections principales : `services` (les conteneurs), `networks` et `volumes`. Chaque option de `docker run` a son équivalent :
-
-| `docker run` | `compose.yaml` |
-| --- | --- |
-| `--name back` | le nom du service : `back:` |
-| `-p 8081:8081` | `ports: ["8081:8081"]` |
-| `-v tp4-data:/data` | `volumes: ["back-data:/data"]`, plus une déclaration dans la section `volumes` |
-| `-e VAR=valeur` | `environment: { VAR: valeur }` |
-| image construite avec `docker build` | `build:` (contexte, arguments) et `image:` (nom et tag de l'image produite) |
 
 **Ce que vous devez faire :**
 
-- Créez `~/tp3/compose.yaml` qui décrit les services `back` et `front` :
-  - le projet s'appelle `tp` (clé `name` en tête de fichier) ;
-  - chaque service est construit à partir de son dossier, avec l'argument `APP_VERSION`, et produit l'image `tp/back` ou `tp/front`, taguée avec la variable `APP_VERSION` (valeur par défaut `dev`) ;
-  - mêmes ports et même volume qu'au TP 4.
+- Créez `compose.yaml` qui décrit les services `back` et `front` :
+  - le projet s'appelle `tp` (clé `name` en tête de fichier).
+  - chaque service est construit (`build`dans compose) à partir de son dossier.
+  - appliquez les ports et les volumes comme précédement.
 - Démarrez la pile en arrière-plan, listez ses services, puis suivez les logs du back jusqu'à son démarrage complet. Vérifiez l'application sur <http://localhost:4200>.
-- Listez les conteneurs, réseaux et volumes créés avec les commandes `docker` habituelles. Comment sont-ils nommés ?
-- Depuis le conteneur `front`, résolvez le nom `back`.
+- Depuis le conteneur `front`, résolvez le nom `back` (`nc -zv back 8080`).
 - Arrêtez la pile avec `docker compose down`. Que reste-t-il ?
 
 **Questions de réflexion :**
 
+- Comment sont nommés les conteneurs, réseaux et volumes ? 
 - Vous n'avez déclaré aucun réseau. Comment les conteneurs peuvent-ils se joindre par leur nom ?
-- Le navigateur appelle le back sur `localhost:8081`, pas sur `back:8081`. Pourquoi ?
 
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
