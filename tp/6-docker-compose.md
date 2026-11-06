@@ -41,7 +41,7 @@ Pour l'occasion, le back abandonne SQLite pour **PostgreSQL**, avec l'image offi
 Rappel des commandes de lancement du TP 4 :
 
 ```bash
-docker container run -d --name back -p 8080:8080 tp5-back:1.0.0
+docker container run -d --name back -p 8080:8080 -v ./data/:/data/ tp5-back:1.0.0
 docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 ```
 
@@ -52,7 +52,7 @@ docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
   - chaque service est construit (`build`dans compose) à partir de son dossier.
   - appliquez les ports et les volumes comme précédement.
 - Démarrez la pile en arrière-plan, listez ses services, puis suivez les logs du back jusqu'à son démarrage complet. Vérifiez l'application sur <http://localhost:4200>.
-- Depuis le conteneur `front`, résolvez le nom `back` (`nc -zv back 8080`).
+- Depuis le conteneur `front`, résolvez le nom `back` (`nc -zv back 8080`). Recommencez avec localhost.
 - Arrêtez la pile avec `docker compose down`. Que reste-t-il ?
 
 **Questions de réflexion :**
@@ -72,30 +72,28 @@ name: tp
 services:
   back:
     build:
-      context: ./back
-      args:
-        APP_VERSION: ${APP_VERSION:-dev}
-    image: tp/back:${APP_VERSION:-dev}
+      context: ../sample-app/back
+      dockerfile: ../../tp5/back/multi_v2.Dockerfile
+    image: tp/back:1.0.0
     ports:
-      - "8081:8081"
+      - "8080:8080"
     volumes:
       - back-data:/data
 
   front:
     build:
-      context: ./front
-      args:
-        APP_VERSION: ${APP_VERSION:-dev}
-    image: tp/front:${APP_VERSION:-dev}
+      context: ../sample-app/front
+      dockerfile: ../../tp5/front/multi.Dockerfile
+    image: tp/front:1.0.0
     ports:
-      - "4200:8080"
+      - "4200:4200"
 
 volumes:
   back-data:
 ```
 
 ```bash
-docker compose up -d
+BUILDX_BAKE_ENTITLEMENTS_FS=0 docker compose up -d
 docker compose ps
 docker compose logs -f back         # Ctrl+C une fois « Started ... » affiché
 ```
@@ -103,20 +101,20 @@ docker compose logs -f back         # Ctrl+C une fois « Started ... » affiché
 Au premier `up`, Compose construit les images absentes avant de créer les conteneurs.
 
 ```bash
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker container ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
 docker network ls --filter name=tp
 docker volume ls --filter name=tp
-docker compose exec front getent hosts back
+docker compose exec front nc -zv back 8080
 ```
 
 Tout est préfixé par le nom du projet : conteneurs `tp-back-1` et `tp-front-1` (le suffixe numérote les répliques), réseau `tp_default`, volume `tp_back-data`. Sans clé `name`, le projet prendrait le nom du dossier.
 
 Compose crée un réseau `tp_default` et y attache tous les services. Sur un réseau défini par l'utilisateur, Docker fournit un **DNS interne** : chaque service est joignable par son nom, qui se résout vers l'adresse IP de son conteneur. Ce n'est pas le cas sur le réseau `bridge` par défaut utilisé par `docker run`.
 
-Le front est une application Angular exécutée **dans le navigateur**, sur votre poste. C'est votre poste qui appelle le back, et il ne connaît pas le DNS interne de Docker : il passe par le port publié sur `localhost`. Le nom `back` n'est utilisable que d'un conteneur à l'autre.
-
 ```bash
 docker compose down
+docker container ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker network ls --filter name=tp
 docker volume ls --filter name=tp
 ```
 
@@ -130,32 +128,30 @@ docker volume ls --filter name=tp
 
 ## Étape 2 - Ajouter PostgreSQL
 
-L'image officielle `postgres` se configure par variables d'environnement : `POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` créent la base et son propriétaire au premier démarrage. Les données sont stockées dans `/var/lib/postgresql/data`.
+**Informations utiles :**
 
-Le back est une application Spring Boot : toute propriété de configuration peut être remplacée par une variable d'environnement, en majuscules, avec `_` à la place des points (`spring.datasource.url` devient `SPRING_DATASOURCE_URL`).
+- L'image officielle `postgres` se configure par variables d'environnement : `POSTGRES_DB`, `POSTGRES_USER` et `POSTGRES_PASSWORD` créent la base et son propriétaire au premier démarrage. Les données sont stockées dans `/var/lib/postgresql/data`.
+- La commande `pg_isready -U app -d app`, exécutée dans le conteneur, indique si PostgreSQL accepte les connexions.
+- Le back est une application Spring Boot : toute propriété de configuration peut être remplacée par une variable d'environnement, en majuscules, avec `_` à la place des points (`spring.datasource.url` devient `SPRING_DATASOURCE_URL`).
+- Le back propose deux profiles : `local` (par défaut), avec SQLite, et `dev`, avec PostgreSQL. Le profile `dev` s'active avec l'argument `--spring.profiles.active=dev`.
 
 **Ce que vous devez faire :**
 
-- Ajoutez un service `db` basé sur `postgres:17-alpine` : base `app`, utilisateur `app`, mot de passe `app` (provisoire), données dans un volume nommé `db-data`.
-- Ajoutez au service `db` un `healthcheck` qui utilise `pg_isready`.
-- Configurez le back pour qu'il utilise PostgreSQL, avec les variables suivantes :
+Écrivez un fichier `compose-postgre.yaml` qui répond aux besoins suivants :
 
-  | Variable | Valeur |
-  | --- | --- |
-  | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://db:5432/app` |
-  | `SPRING_DATASOURCE_USERNAME` | `app` |
-  | `SPRING_DATASOURCE_PASSWORD` | `app` |
-  | `SPRING_DATASOURCE_DRIVER_CLASS_NAME` | `org.postgresql.Driver` |
-  | `SPRING_JPA_DATABASE_PLATFORM` | `org.hibernate.dialect.PostgreSQLDialect` |
+- Une base de données PostgreSQL :
+  - basée sur l'image `postgres:17-alpine`.
+  - la base et l'utilisateur s'appellent `app`, le mot de passe est libre.
+  - les données sont stockées dans un volume `db-data`.
+  - son état de santé est contrôlé régulièrement avec `pg_isready`.
+- Le back :
+  - se connecte à la base PostgreSQL avec les variables `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` et `SPRING_DATASOURCE_PASSWORD`.
+  - démarre avec le profile `dev` en argument (**pas besoin de reconstruire l'image**).
+  - ne démarre **que lorsque la base accepte les connexions**.
+  - n'a plus besoin du volume `back-data`.
+- Le front ne change pas.
 
-- Faites démarrer le back **seulement quand la base est prête**. Retirez le volume `back-data`, devenu inutile.
-- Démarrez la pile et observez l'ordre de démarrage dans `docker compose ps` et dans les logs.
-- Créez des données dans l'application. Faites `down` puis `up -d` : les données sont-elles toujours là ? Et après `down -v` ?
-
-**Questions de réflexion :**
-
-- Quelle différence entre `depends_on: [db]` et `depends_on` avec `condition: service_healthy` ?
-- Pourquoi n'a-t-il pas fallu reconstruire l'image du back pour changer de base de données ?
+Démarrez la pile et observez l'ordre de démarrage dans `docker compose ps` et dans les logs.
 
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
@@ -170,7 +166,7 @@ services:
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
+      POSTGRES_PASSWORD: azerty9876
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -181,57 +177,46 @@ services:
 
   back:
     build:
-      context: ./back
-      args:
-        APP_VERSION: ${APP_VERSION:-dev}
-    image: tp/back:${APP_VERSION:-dev}
+      context: ../sample-app/back
+      dockerfile: ../../tp5/back/multi_v2.Dockerfile
+    image: tp/back:1.0.0
+    command: ["--spring.profiles.active=dev"]
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/app
       SPRING_DATASOURCE_USERNAME: app
-      SPRING_DATASOURCE_PASSWORD: app
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_DATASOURCE_PASSWORD: azerty9876
     ports:
-      - "8081:8081"
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
 
   front:
     build:
-      context: ./front
-      args:
-        APP_VERSION: ${APP_VERSION:-dev}
-    image: tp/front:${APP_VERSION:-dev}
+      context: ../sample-app/front
+      dockerfile: ../../tp5/front/multi.Dockerfile
+    image: tp/front:1.0.0
     ports:
-      - "4200:8080"
+      - "4200:4200"
 
 volumes:
   db-data:
 ```
 
 ```bash
-docker compose up -d
-docker compose ps                   # db : (healthy)
-docker compose logs db back
+BUILDX_BAKE_ENTITLEMENTS_FS=0 docker compose -f compose-postgre.yaml up -d
+docker compose -f compose-postgre.yaml ps                   # db : (healthy)
+docker compose -f compose-postgre.yaml logs db back
 ```
 
 `up` attend que `db` soit `healthy` avant de créer `back`. Le volume `tp_back-data` de l'étape 1 n'est plus utilisé : supprimez-le avec `docker volume rm tp_back-data`.
 
 ```bash
-docker compose down && docker compose up -d     # données conservées
-docker compose down -v && docker compose up -d  # base vide
+docker compose -f compose-postgre.yaml down
+docker compose -f compose-postgre.yaml down -v && docker compose -f compose-postgre.yaml up -d  # base vide
 ```
 
 `down -v` supprime aussi les volumes nommés déclarés dans le fichier : la base repart de zéro.
-
-`depends_on: [db]` n'attend que le **démarrage du conteneur** `db`, pas celui de PostgreSQL, qui met quelques secondes à accepter des connexions. Le back démarrerait trop tôt, échouerait à se connecter et s'arrêterait. Avec `condition: service_healthy`, Compose attend que le `healthcheck` réussisse.
-
-`pg_isready` vérifie que le serveur accepte les connexions. La forme `CMD-SHELL` exécute la commande dans un shell du conteneur ; la forme `CMD` l'exécuterait directement.
-
-Le back n'a pas de `healthcheck` : son image distroless ne contient ni shell ni `curl` pour en écrire un. Pour un service qui dépend du back, on ajouterait un endpoint de santé et un petit binaire de test dans l'image, ou on laisserait l'orchestrateur sonder le port.
-
-Les deux drivers sont dans l'image depuis le TP 3. Les variables d'environnement remplacent la configuration SQLite de `application.yml` au démarrage : même image, configuration différente. C'est le principe qui permet de promouvoir **la même image** du développement à la production.
 
 {::nomarkdown}
 </details>
@@ -303,7 +288,7 @@ Services `db` et `back` :
     # volumes et healthcheck inchangés
 
   back:
-    # build, image, ports et depends_on inchangés
+    # build, image, command, ports et depends_on inchangés
     env_file: back.env
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}
@@ -540,6 +525,7 @@ services:
       args:
         APP_VERSION: ${APP_VERSION:-dev}
     image: tp/back:${APP_VERSION:-dev}
+    command: ["--server.port=8080", "--spring.profiles.active=dev"]
     env_file: back.env
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}

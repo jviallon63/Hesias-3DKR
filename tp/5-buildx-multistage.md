@@ -186,7 +186,7 @@ EXPOSE 4200
 docker buildx build -t tp5-front-nginx:1.0.0 front/
 docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}'
 
-docker container run -d --name back -p 8080:8080 tp5-back:1.0.0
+docker container run -d --name back -p 8080:8080 -v ./data/:/data/ tp5-back:1.0.0
 docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 ```
 
