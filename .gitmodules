@@ -1,3 +1,4 @@
 [submodule "tp/sample-app"]
 	path = tp/sample-app
 	url = https://github.com/jviallon63/sample-app.git
+	branch = main
