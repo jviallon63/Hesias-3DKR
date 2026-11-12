@@ -9,9 +9,7 @@ objective: "Piloter le cycle de vie d'un conteneur avec la CLI Docker, maîtrise
 
 Votre installation fonctionne et vous savez lancer un conteneur. Avant d'écrire vos propres images, il faut savoir exploiter celles des autres : les démarrer avec la bonne configuration, comprendre dans quel état elles se trouvent, lire ce qu'elles racontent et les empêcher de consommer toutes les ressources de la machine.
 
-Ce TP n'utilise aucun `Dockerfile`. Le fil rouge est l'image officielle `nginx`, un serveur web dont chaque paramètre (port, fichiers servis, configuration, logs) se vérifie immédiatement dans un navigateur ou avec `curl`. Les tests de limites utilisent `alpine`.
-
-> Les commandes sont écrites pour un shell bash ou zsh (Linux, macOS, WSL). Sous PowerShell, remplacez `$PWD` par `${PWD}` et `curl` par `curl.exe`.
+Le fil rouge est l'image officielle `nginx`, un serveur web dont chaque paramètre (port, fichiers servis, configuration, logs) se vérifie immédiatement dans un navigateur ou avec `curl`. Les tests de limites utilisent `alpine`.
 
 ---
 
@@ -43,6 +41,7 @@ Une image n'est pas qu'un système de fichiers : elle contient aussi des **méta
 
 - Certaines lignes de l'historique ont une taille de `0B`. Qu'est-ce que cela signifie ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -68,6 +67,7 @@ Les lignes à `0B` de `docker history` correspondent à des instructions qui ne 
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -101,6 +101,7 @@ stateDiagram-v2
 
 - Notez que le container est supprimé, mais l'image reste localement.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -130,6 +131,7 @@ docker container rm -f cycle     # arrêt forcé (SIGKILL) puis suppression
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -150,6 +152,7 @@ L'instruction `EXPOSE 80` de l'image est **documentaire** : elle indique sur que
 - Pourquoi deux conteneurs peuvent-ils écouter tous les deux sur leur port 80, mais pas être publiés tous les deux sur le port 8080 de l'hôte ?
 - Que se passe-t-il avec `-P` (majuscule) ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -181,6 +184,7 @@ Chaque conteneur a sa propre pile réseau (namespace réseau) et donc son propre
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -201,6 +205,7 @@ Un conteneur bien conçu écrit ses logs sur sa sortie standard et sa sortie d'e
 - nginx écrit traditionnellement dans `/var/log/nginx/access.log`. Comment ces lignes arrivent-elles dans `docker logs` ?
 - Vous quittez le shell ouvert avec `docker exec` : le conteneur s'arrête-t-il ? Et si vous quittez le shell d'un conteneur lancé avec `docker run -it alpine sh` ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -235,6 +240,7 @@ nginx croit écrire dans des fichiers, mais tout part dans les flux capturés pa
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -253,6 +259,7 @@ Tout ce qui est écrit dans un conteneur disparaît avec lui. Deux mécanismes p
 - Lancez un conteneur `site` qui sert ce dossier à la place de la page par défaut de nginx (le contenu servi se trouve dans `/usr/share/nginx/html`), publié sur le port 8082. Vérifiez dans le navigateur.
 - Modifiez `index.html` **sur l'hôte** et rechargez la page, sans toucher au conteneur.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
@@ -273,6 +280,7 @@ curl http://localhost:8082
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -308,6 +316,7 @@ L'image `nginx` officielle propose un mécanisme pour cela : au démarrage, son 
 
 - Vous devez passer un mot de passe de base de données à un conteneur. Qui peut le lire si vous utilisez une variable d'environnement ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 6</summary>
 {:/nomarkdown}
@@ -357,6 +366,7 @@ Une variable d'environnement est visible par quiconque peut exécuter `docker co
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -378,6 +388,7 @@ Une variable d'environnement est visible par quiconque peut exécuter `docker co
 - Dans `docker container stats`, que représente la valeur après le `/` dans la colonne `MEM USAGE / LIMIT` ?
 - Les PID affichés par `docker container top` sont-ils les mêmes que ceux vus par `ps` dans le conteneur ? Pourquoi ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 7</summary>
 {:/nomarkdown}
@@ -403,6 +414,7 @@ Sans limite, `LIMIT` affiche toute la mémoire disponible pour Docker : celle de
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -425,6 +437,7 @@ Par défaut, un conteneur peut consommer toute la mémoire et tout le CPU dispon
 - Stoppez et relancez le container avec une limite à 2 cpus. Observez de nouveau sa consommation CPU.
 - Stoppez et relancer le container avec 2 `yes` (`sh -c 'yes > /dev/null & yes > /dev/null & wait'`) en paralléle avec une limite à 1.5 cpus.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 8</summary>
 {:/nomarkdown}
@@ -468,6 +481,7 @@ Une limite de mémoire dépassée tue le processus. Une limite de CPU atteinte l
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -480,6 +494,7 @@ Une limite de mémoire dépassée tue le processus. Une limite de CPU atteinte l
 - Supprimez les images qui ne sont plus utilisées par aucun conteneur.
 - Affichez de nouveau l'espace disque occupé.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 9</summary>
 {:/nomarkdown}
@@ -499,6 +514,7 @@ docker system df
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -537,5 +553,3 @@ docker system df
 | `--memory` / `--memory-swap` | Limiter la mémoire |
 | `--cpus` | Limiter le CPU |
 | `--rm` | Supprimer le conteneur à sa sortie |
-
-{% endraw %}
