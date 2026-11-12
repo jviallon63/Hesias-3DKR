@@ -3,8 +3,6 @@ title: "TP 2 - Prendre en main la CLI Docker"
 objective: "Piloter le cycle de vie d'un conteneur avec la CLI Docker, maîtriser les ports, volumes et variables d'environnement, observer un conteneur en fonctionnement et lui imposer des limites de mémoire et de CPU."
 ---
 
-{% raw %}
-
 # Contexte
 
 Votre installation fonctionne et vous savez lancer un conteneur. Avant d'écrire vos propres images, il faut savoir exploiter celles des autres : les démarrer avec la bonne configuration, comprendre dans quel état elles se trouvent, lire ce qu'elles racontent et les empêcher de consommer toutes les ressources de la machine.
