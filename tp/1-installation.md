@@ -60,6 +60,7 @@ flowchart LR
 
 > Docker Desktop est gratuit pour un usage personnel, éducatif et pour les petites entreprises. Au-delà (plus de 250 salariés ou plus de 10 M$ de chiffre d'affaires), une licence payante est requise. Vérifiez les conditions en vigueur avant de l'installer sur un poste professionnel.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2, Linux (Ubuntu / Debian)</summary>
 {:/nomarkdown}
@@ -147,6 +148,7 @@ colima start
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -158,6 +160,7 @@ colima start
 - Affichez les informations détaillées du daemon : nombre de conteneurs et d'images, runtime utilisé, driver de stockage, système d'exploitation et architecture du serveur : `docker info`
 - Arrêtez le daemon docker (ou quittez Docker Desktop), et recommencez.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -193,6 +196,7 @@ Cela confirme que le client est un simple programme qui interroge une API. Sous 
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -208,6 +212,7 @@ Cela confirme que le client est un simple programme qui interroge une API. Sous 
 - Listez les conteneur en execution : `docker container ps`
 - Relancer le container, observez les logs cette fois.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -231,6 +236,7 @@ To generate this message, Docker took the following steps:
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -246,7 +252,7 @@ To generate this message, Docker took the following steps:
 - Sortez du conteneur.
 - Observer la taille de l'image avec `docker image ls`
 
-
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
@@ -260,3 +266,4 @@ L'écart de taille s'explique par l'absence de noyau et de matériel virtualisé
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
