@@ -3,8 +3,6 @@ title: "TP 5 - Builds multi-étapes et multi-plateformes avec Buildx"
 objective: "Réécrire les images du TP 3 avec des builds multi-étapes pour les réduire au strict nécessaire, puis les construire pour plusieurs architectures et les publier avec un schéma de tags versionné."
 ---
 
-{% raw %}
-
 # Contexte
 
 Le TP 3 s'est terminé sur un constat : avec un Dockerfile à une seule étape, tout ce qui sert à **construire** l'application (JDK, Maven, `~/.m2`, Node.js, `node_modules`, sources) reste dans l'image qui l'**exécute**. Et il fallait choisir entre un build rapide (dépendances en cache dans une couche) et une image légère.
@@ -59,6 +57,7 @@ Un Dockerfile multi-étapes contient plusieurs `FROM`. Chacun démarre une **ét
 
 - Qu'est-ce qui a disparu de l'image finale par rapport au TP 3 ? Que montre `docker history` des instructions de l'étape `build` ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -104,6 +103,7 @@ ls -l target/*.jar
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -127,7 +127,7 @@ window.dynamicConf = {
 EOF
 ```
 
-- le routage d'Angular : avec une configuration ngonx classique.
+- le routage d'Angular : avec une configuration nginx classique.
 
 `/etc/nginx/conf.d/default.conf` :
 
@@ -159,6 +159,7 @@ server {
 
 - L'étape finale ne contient ni `ENTRYPOINT` ni `CMD`. Comment le conteneur sait-il quoi lancer ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -195,6 +196,7 @@ L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `C
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -213,7 +215,8 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 - Pour mesurer précisément les temps d'exécution, videz le cache de Buildx avec la commande `docker buildx prune -a`.
 - Avec l'option `--platform`, construisez le back pour `linux/amd64` et `linux/arm64`. Notez le temps de build.
 - Videz le cache de Buildx de nouveau !
-- Dans le Dockerfile, ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front. 
+- Dans le Dockerfile, ajoutez `--platform=$BUILDPLATFORM` sur le `FROM` de l'étape `build` du back et du front.  Notez le temps de build.
+
 
 - Démarrer la registry du TP4 (avec l'UI si possible).
 - Poussez la dernière image du back avec le multi-arch sur la registry.
@@ -226,6 +229,7 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 - Dans quel cas `--platform=linux/amd64,linux/arm64` ne suffirait-il pas sur la commande de build ?
 - Quelle différence entre `docker image inspect` et `docker buildx imagetools inspect`?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -280,6 +284,7 @@ docker exec -it back uname -a
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -291,6 +296,7 @@ Nous disposons maintenant d'une image multi-plateforme à publier dans la regist
 
 - Construisez et publiez l'image du back pour les architectures `amd64` et `arm64` dans la registry `localhost:5000`, sous les tags `1.0.1`, `1.0` et `latest`, à l'aide d'une seule commande `docker buildx build`.
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -312,6 +318,7 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -324,6 +331,7 @@ Au TP 4, Trivy a scanné l'image du back construite en une seule étape : Ubuntu
 - Scannez `back:0.0.0` (l'image complète du TP 4) et `back:1.0.0` (l'image construite dans ce TP).
 - Refaites les deux scans en séparant les vulnérabilités des **paquets du système** (`--pkg-types os`) de celles des **bibliothèques applicatives** (`--pkg-types library`).
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
@@ -354,6 +362,7 @@ Less vulnérabilités du jar applicatif sont **identiques** dans les deux images
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -362,5 +371,3 @@ Less vulnérabilités du jar applicatif sont **identiques** dans les deux images
 **Ce que vous devez faire :**
 
 - Faites le ménage : conteneurs, volume, builder.
-
-{% endraw %}
