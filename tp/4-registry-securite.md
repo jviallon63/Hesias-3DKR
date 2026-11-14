@@ -3,8 +3,6 @@ title: "TP 4 - Registre privé et sécurité des images"
 objective: "Héberger un registre privé authentifié, y publier des images avec et sans gestion de version, détecter vulnérabilités, secrets et mauvaises configurations avec Trivy, corriger les images et durcir leur exécution."
 ---
 
-{% raw %}
-
 # Contexte
 
 Vos images sont prêtes. Pour être déployées, elles doivent être publiées dans un **registre** accessible aux serveurs, et elles doivent être **sûres** : une image embarque un système, des bibliothèques et parfois, par erreur, des secrets. Chacun de ces éléments peut contenir des vulnérabilités connues, publiées sous forme de **CVE** (*Common Vulnerabilities and Exposures*).
@@ -19,8 +17,6 @@ Vos images sont prêtes. Pour être déployées, elles doivent être publiées d
 2. Publier et récupérer des images avec `docker login`, `push` et `pull`
 3. Mesurer les conséquences d'une publication sans gestion de version
 4. Détecter vulnérabilités, secrets et mauvaises configurations avec Trivy
-5. Corriger une image et bloquer les images vulnérables avant publication
-6. Durcir l'exécution d'un conteneur
 
 </div>
 
@@ -46,6 +42,7 @@ Un registre est un serveur HTTP qui stocke des manifestes et des couches, et exp
 - Une UI existe pour `registry:3`, essayez de la démarrer à coté : [docker-registry-ui](https://github.com/joxit/docker-registry-ui)
   - Vous devez utiliser les réseaux docker pour avoir `registry` et `registry-ui` sur le même réseau. `registry-ui` accède à `registry` avec `http://registry:5000`
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -79,6 +76,7 @@ docker container run -d --name registry-ui \
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -100,6 +98,7 @@ Le nom d'une image indique **où** la pousser : `localhost:5000/sample-app/back:
 
 - Est-ce qu'une image avec plusieurs tag augmente la volumétrie sur le disque ? Pourquoi ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -114,7 +113,7 @@ docker push localhost:5000/sample-app/back:0.0.0
 docker image rm tp4-back:0.0.0
 docker image rm localhost:5000/sample-app/back:0.0.0
 
-docker localhost:5000/sample-app/back:0.0.0
+docker pull localhost:5000/sample-app/back:0.0.0
 
 curl -u etudiant:tp4-Registre http://localhost:5000/v2/_catalog
 curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
@@ -123,22 +122,24 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
 ## Étape 3 - Publier en gérant les versions
 
-On reprend le schéma du TP 4 : un tag immuable par version (`0.0.0`), des tags mobiles (`1.0`, `1`, `latest`) déplacés à chaque publication.
+On souhaite publier plusiers tag de la même image pour permettre une gestion flexible de notre application. Un tag immuable par version (`0.0.0`), des tags mobiles (`0.0`, `0`, `latest`) déplacés à chaque publication
 
 **Ce que vous devez faire :**
 
 - Poussez sur la registry l'image précédentes avec des tag "mobiles" `latest`et `1.0`.
-- Observez les logs.
+- Observez `/tags/list` de votre dêpot sur la registre.
 
 **Questions de réflexion :**
 
 - Quel tag mettre dans un fichier de déploiement de production ? Et dans un environnement de développement ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -154,6 +155,7 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -201,6 +203,7 @@ trivy() {
 }
 ```
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -251,7 +254,6 @@ Sans version corrigée, on peut : vérifier si la vulnérabilité est réellemen
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
-
-{% endraw %}
