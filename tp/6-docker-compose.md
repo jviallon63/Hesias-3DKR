@@ -3,8 +3,6 @@ title: "TP 6 - Orchestrer l'application avec Docker Compose"
 objective: "Décrire l'application complète (front, back, base PostgreSQL) dans un fichier Compose, maîtriser réseaux, volumes, ports et variables d'environnement, et exploiter la pile avec les commandes docker compose."
 ---
 
-{% raw %}
-
 # Contexte
 
 Au TP 4, lancer l'application demandait deux commandes `docker run` de plusieurs lignes, dans le bon ordre, avec les bons ports, volumes et variables. Ajoutez une base de données, et l'équipe se retrouve avec un fichier texte de commandes à copier-coller, que personne ne tient à jour.
@@ -49,8 +47,9 @@ docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 
 - Créez `compose.yaml` qui décrit les services `back` et `front` :
   - le projet s'appelle `tp` (clé `name` en tête de fichier).
-  - chaque service est construit (`build`dans compose) à partir de son dossier.
+  - chaque service est construit (`build` dans compose) à partir de son dossier.
   - appliquez les ports et les volumes comme précédement.
+  - On conserve SQLite pour le moment.
 - Démarrez la pile en arrière-plan, listez ses services, puis suivez les logs du back jusqu'à son démarrage complet. Vérifiez l'application sur <http://localhost:4200>.
 - Depuis le conteneur `front`, résolvez le nom `back` (`nc -zv back 8080`). Recommencez avec localhost.
 - Arrêtez la pile avec `docker compose down`. Que reste-t-il ?
@@ -60,6 +59,7 @@ docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 - Comment sont nommés les conteneurs, réseaux et volumes ? 
 - Vous n'avez déclaré aucun réseau. Comment les conteneurs peuvent-ils se joindre par leur nom ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -123,6 +123,7 @@ docker volume ls --filter name=tp
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -154,7 +155,7 @@ docker volume ls --filter name=tp
 Démarrez la pile et observez l'ordre de démarrage dans `docker compose ps` et dans les logs.
 
 Depuis chaque conteneur, vérifiez avec `nc -zv` que les autres services sont joignables.
-
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -225,6 +226,7 @@ Le mot de passe de la base apparaît ici en clair dans le fichier Compose. En pr
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -246,6 +248,7 @@ Pour l'instant, les trois services partagent le réseau `tp_default` : le front 
 
 - Que signifie `internal: true` sur le réseau `backend` ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -300,6 +303,7 @@ Le back est aussi sur `frontend`, un réseau classique : c'est par lui que passe
 {::nomarkdown}
 </details>
 {:/nomarkdown}
+{% endcomment %}
 
 ---
 
@@ -322,6 +326,7 @@ Certains services ne servent qu'occasionnellement : outils d'administration, jeu
 
 - Pourquoi `adminer` doit-il être relié à deux réseaux ?
 
+{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -428,5 +433,4 @@ networks:
     internal: true
   frontend:
 ```
-
-{% endraw %}
+{% endcomment %}
