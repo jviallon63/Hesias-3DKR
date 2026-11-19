@@ -166,8 +166,8 @@ Pas besoin de l'installer : on l'exécute dans un conteneur, avec le socket Dock
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v trivy-cache:/root/.cache \
-  -v "$PWD":/work -w /work \
-  "aquasec/trivy:0.76.1" image localhost:5000/.....
+  -v "$PWD:/work" -w /work \
+  aquasec/trivy:0.76.1 image localhost:5000/.....
 ```
 
 - Lisez et comprenez la log !
@@ -191,8 +191,8 @@ trivy() {
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
-    -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" "$@"
+    -v "$PWD:/work" -w /work \
+    aquasec/trivy:0.76.1 "$@"
 }
 ```
 
@@ -204,28 +204,28 @@ trivy() {
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
-    -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" image localhost:5001/sample-app/back:0.0.0
+    -v "$PWD:/work" -w /work \
+    aquasec/trivy:0.76.1 image localhost:5001/sample-app/back:0.0.0
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
-    -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" image --severity CRITICAL localhost:5001/sample-app/back:0.0.0
+    -v "$PWD:/work" -w /work \
+    aquasec/trivy:0.76.1 image --severity CRITICAL localhost:5001/sample-app/back:0.0.0
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
-    -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" config tp/tp3/back/v2.Dockerfile
+    -v "$PWD:/work" -w /work \
+    aquasec/trivy:0.76.1 config tp/tp3/back/v2.Dockerfile
 
 curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/v0.76.1/contrib/html.tpl
 
 docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache \
-    -v "$PWD":/work -w /work \
-    "aquasec/trivy:0.76.1" image \
+    -v "$PWD:/work" -w /work \
+    aquasec/trivy:0.76.1 image \
     --format template \
     --template "@/work/html.tpl" \
     -o report.html \
