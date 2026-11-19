@@ -40,7 +40,19 @@ Un registre est un serveur HTTP qui stocke des manifestes et des couches, et exp
 
 - Comment gérer plus facilement les multiples variables d'environnements ?
 - Une UI existe pour `registry:3`, essayez de la démarrer à coté : [docker-registry-ui](https://github.com/joxit/docker-registry-ui)
-  - Vous devez utiliser les réseaux docker pour avoir `registry` et `registry-ui` sur le même réseau. `registry-ui` accède à `registry` avec `http://registry:5000`
+
+`docker-registry-ui`
+
+```bash
+docker network create registry-net
+docker network connect registry-net registry
+docker container run -d --name registry-ui \
+  --network registry-net \
+  -p 8080:80 \
+  -e SINGLE_REGISTRY=true \
+  -e NGINX_PROXY_PASS_URL=http://registry:5000 \
+  joxit/docker-registry-ui:latest
+```
 
 {% comment %}
 {::nomarkdown}
@@ -58,19 +70,6 @@ docker container run --name registry -d -p 5001:5000 -v registry-data:/var/lib/r
 curl http://localhost:5001/v2/                                      # 401 Unauthorized
 curl -u etudiant:tp4-Registre http://localhost:5001/v2/             # {}
 curl -u etudiant:tp4-Registre http://localhost:5001/v2/_catalog     # {"repositories":[]}
-```
-
-`docker-registry-ui`
-
-```bash
-docker network create registry-net
-docker network connect registry-net registry
-docker container run -d --name registry-ui \
-  --network registry-net \
-  -p 8080:80 \
-  -e SINGLE_REGISTRY=true \
-  -e NGINX_PROXY_PASS_URL=http://registry:5000 \
-  joxit/docker-registry-ui:latest
 ```
 
 {::nomarkdown}
