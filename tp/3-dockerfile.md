@@ -71,7 +71,6 @@ L'application écoute sur le port `8080`, sous le chemin `/api`, et stocke sa ba
 
 - Relevez la taille de l'image et affichez son historique. Identifiez les axes d'optimisation.
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -103,7 +102,6 @@ docker image history tp3-back:v1
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -135,7 +133,6 @@ Le script `docker-entrypoint.sh` écrit l'URL du back dans `/app/dist/browser/as
 
 - Relevez la taille de l'image et affichez son historique. Identifiez les axes d'optimisation.
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -167,7 +164,6 @@ docker image history tp3-front:v1
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -185,7 +181,6 @@ docker image history tp3-front:v1
 - Téléchargez les images suivantes et comparez leurs tailles : `eclipse-temurin:21-jdk`, `eclipse-temurin:21-jdk-alpine`, `eclipse-temurin:21-ubi10-minimal`, `eclipse-temurin:21-jre-alpine`, `gcr.io/distroless/java21-debian12`.
 - Affichez la liste des outils présents dans le JDK et dans le JRE alpine (`ls /opt/java/openjdk/bin`). Lequel contient `javac` ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -208,7 +203,6 @@ En production, on privilégie une image minimale : distroless ou JRE alpine, si 
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -235,7 +229,6 @@ Repartez de votre V1 et appliquez les règles suivantes, puis construisez `tp3-b
 - Pourquoi faire tourner l'application avec un utilisateur non root ?
 - Lancez la V2 sur le port 9090 **sans modifier l'image**, en profitant de la combinaison `ENTRYPOINT` + `CMD`.
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -289,7 +282,6 @@ L'argument `--server.port=9090` remplace le `CMD` et est ajouté après l'`ENTRY
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -313,7 +305,6 @@ Comparez ensuite les tailles et les historiques de V1 et V2.
 - Comparez ensuite les tailles et les historiques de V1 et V2.
 - Pourquoi `COPY --chown=node:node` plutôt que `COPY` suivi de `RUN chown -R node:node /app` ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
@@ -349,4 +340,3 @@ Le passage à `alpine` et le nettoyage des caches réduisent nettement la taille
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
