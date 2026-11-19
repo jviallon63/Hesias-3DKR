@@ -54,7 +54,6 @@ docker container run -d --name registry-ui \
   joxit/docker-registry-ui:latest
 ```
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -75,7 +74,6 @@ curl -u etudiant:tp4-Registre http://localhost:5001/v2/_catalog     # {"reposito
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -97,7 +95,6 @@ Le nom d'une image indique **où** la pousser : `localhost:5000/sample-app/back:
 
 - Est-ce qu'une image avec plusieurs tag augmente la volumétrie sur le disque ? Pourquoi ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -121,7 +118,6 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -138,7 +134,6 @@ On souhaite publier plusiers tag de la même image pour permettre une gestion fl
 
 - Quel tag mettre dans un fichier de déploiement de production ? Et dans un environnement de développement ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -154,7 +149,6 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -202,7 +196,6 @@ trivy() {
 }
 ```
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -253,6 +246,5 @@ Sans version corrigée, on peut : vérifier si la vulnérabilité est réellemen
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
