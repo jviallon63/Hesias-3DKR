@@ -432,3 +432,43 @@ details[open] > summary {
   text-align: center;
   margin: 24px 0;
 }
+
+/* ============================================
+   QCM
+   ============================================ */
+.qcm-question {
+  margin: 28px 0 8px;
+}
+
+ul.qcm {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+ul.qcm li {
+  padding: 4px 12px;
+  margin: 4px 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+ul.qcm:has(+ details.qcm-answer[open]) li.correct {
+  background: #E6F6EA;
+  border-color: #34A853;
+  color: #146C2E;
+  font-weight: 600;
+}
+
+ul.qcm:has(+ details.qcm-answer[open]) li.correct::after {
+  content: " ✓";
+}
+
+details.qcm-answer {
+  border-left-color: #34A853;
+  margin-top: 8px;
+}
+
+details.qcm-answer > summary {
+  color: #146C2E;
+}
