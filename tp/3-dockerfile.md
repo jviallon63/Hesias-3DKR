@@ -239,7 +239,7 @@ Repartez de votre V1 et appliquez les règles suivantes, puis construisez `tp3-b
 FROM ubuntu:24.04
 
 RUN apt-get update \
- && apt-get install -y openjdk21-jdk-headless maven \
+ && apt-get install -y openjdk-21-jdk-headless maven \
  && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system app && adduser --system --ingroup app app
