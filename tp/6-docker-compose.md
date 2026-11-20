@@ -59,7 +59,6 @@ docker container run -d --name front -p 4200:4200 tp5-front-nginx:1.0.0
 - Comment sont nommés les conteneurs, réseaux et volumes ? 
 - Vous n'avez déclaré aucun réseau. Comment les conteneurs peuvent-ils se joindre par leur nom ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -123,7 +122,6 @@ docker volume ls --filter name=tp
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -155,7 +153,7 @@ docker volume ls --filter name=tp
 Démarrez la pile et observez l'ordre de démarrage dans `docker compose ps` et dans les logs.
 
 Depuis chaque conteneur, vérifiez avec `nc -zv` que les autres services sont joignables.
-{% comment %}
+
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -226,7 +224,6 @@ Le mot de passe de la base apparaît ici en clair dans le fichier Compose. En pr
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -248,7 +245,6 @@ Pour l'instant, les trois services partagent le réseau `tp_default` : le front 
 
 - Que signifie `internal: true` sur le réseau `backend` ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -303,7 +299,6 @@ Le back est aussi sur `frontend`, un réseau classique : c'est par lui que passe
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -326,7 +321,6 @@ Certains services ne servent qu'occasionnellement : outils d'administration, jeu
 
 - Pourquoi `adminer` doit-il être relié à deux réseaux ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -433,4 +427,3 @@ networks:
     internal: true
   frontend:
 ```
-{% endcomment %}
