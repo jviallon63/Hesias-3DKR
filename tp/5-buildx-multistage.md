@@ -75,7 +75,7 @@ RUN apk upgrade --no-cache
 RUN addgroup --system app && adduser --system --ingroup app app
 WORKDIR /app
 COPY --from=build /app/target/openapi-workshop-1.0.0.jar app.jar
-RUN mkdir /data && chown ubuntu:ubuntu /data
+RUN mkdir /data && chown app:app /data
 USER app
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
