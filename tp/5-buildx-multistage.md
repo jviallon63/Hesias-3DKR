@@ -225,7 +225,6 @@ Par défaut, **chaque étape** est exécutée pour la plateforme cible, donc sou
 - Dans quel cas `--platform=linux/amd64,linux/arm64` ne suffirait-il pas sur la commande de build ?
 - Quelle différence entre `docker image inspect` et `docker buildx imagetools inspect`?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 3</summary>
 {:/nomarkdown}
@@ -280,7 +279,6 @@ docker exec -it back uname -a
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -292,7 +290,6 @@ Nous disposons maintenant d'une image multi-plateforme à publier dans la regist
 
 - Construisez et publiez l'image du back pour les architectures `amd64` et `arm64` dans la registry `localhost:5000`, sous les tags `1.0.1`, `1.0` et `latest`, à l'aide d'une seule commande `docker buildx build`.
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 4</summary>
 {:/nomarkdown}
@@ -314,7 +311,6 @@ curl -u etudiant:tp4-Registre http://localhost:5000/v2/sample-app/back/tags/list
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
@@ -327,7 +323,6 @@ Au TP 4, Trivy a scanné l'image du back construite en une seule étape : Ubuntu
 - Scannez `back:0.0.0` (l'image complète du TP 4) et `back:1.0.0` (l'image construite dans ce TP).
 - Refaites les deux scans en séparant les vulnérabilités des **paquets du système** (`--pkg-types os`) de celles des **bibliothèques applicatives** (`--pkg-types library`).
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 5</summary>
 {:/nomarkdown}
@@ -358,7 +353,6 @@ Less vulnérabilités du jar applicatif sont **identiques** dans les deux images
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
