@@ -157,7 +157,6 @@ server {
 
 - L'étape finale ne contient ni `ENTRYPOINT` ni `CMD`. Comment le conteneur sait-il quoi lancer ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 2</summary>
 {:/nomarkdown}
@@ -194,7 +193,6 @@ L'étape finale **hérite** de l'`ENTRYPOINT` (`/docker-entrypoint.sh`) et du `C
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
