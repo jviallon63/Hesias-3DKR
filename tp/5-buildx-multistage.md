@@ -57,7 +57,6 @@ Un Dockerfile multi-étapes contient plusieurs `FROM`. Chacun démarre une **ét
 
 - Qu'est-ce qui a disparu de l'image finale par rapport au TP 3 ? Que montre `docker history` des instructions de l'étape `build` ?
 
-{% comment %}
 {::nomarkdown}
 <details><summary>Solution - Étape 1</summary>
 {:/nomarkdown}
@@ -103,7 +102,6 @@ ls -l target/*.jar
 {::nomarkdown}
 </details>
 {:/nomarkdown}
-{% endcomment %}
 
 ---
 
